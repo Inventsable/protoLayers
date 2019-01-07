@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExtensionList>
+    <Extension Id="inventsable.protolayers.panel">
+        <HostList>
+            <Host Name="ILST" Port="2130"/>
+        </HostList>
+    </Extension>
+    <!-- <Extension Id="inventsable.protolayers.panel">
+        <HostList>
+            <Host Name="ILST" Port="2131"/>
+        </HostList>
+    </Extension> -->
+</ExtensionList>
