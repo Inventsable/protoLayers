@@ -37,7 +37,7 @@
     border-width: var(--border-width) 0px 0px 0px;
 }
 
-::placeholder {
+::placeholder, input {
   color: var(--color-placeholder);
 }
 

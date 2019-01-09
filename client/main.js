@@ -98,25 +98,32 @@ Vue.component('protolayers', {
     setPort(msg) {
       this.info.localhost = msg;
     },
+    getLayerList(msg) {
+      // console.log(`msg is ${msg}`)
+      msg = JSON.parse(msg);
+      console.log(`layerlist is:`)
+      console.log(msg);
+    },
     getData(msg) {
+      // msg = JSON.parse(msg);
       console.log(`msg is ${msg}`)
-      //   msg = JSON.parse(msg);
-      //   let mirror = [];
-      //   for (let i = 0; i < msg.colors.length; i++) {
-      //     const arr = msg.colors[i];
-      //     mirror = [].concat(mirror, arr);
-      //   }
-      //   mirror = this.$root.removeDuplicatesInArray(mirror);
-      //   // this.createNodeList(mirror);
-      //   console.log(`Data result is:`)
-      //   console.log(mirror);
+      
+      // let mirror = [];
+      // for (let i = 0; i < msg.colors.length; i++) {
+      //   const arr = msg.colors[i];
+      //   mirror = [].concat(mirror, arr);
+      // }
+      // mirror = this.$root.removeDuplicatesInArray(mirror);
+      // // this.createNodeList(mirror);
+      // console.log(`Data result is:`)
+      // console.log(mirror);
     },
   },
   mounted() {
     this.$root.screen = this.$el.children[4];
     this.$root.screenInner = this.$el.children[4].children[0];
-    csInterface.evalScript(`init()`, this.getData);
-    // console.log(`Version is ${this.version}`);
+    csInterface.evalScript(`getLayerCount()`, this.getData);
+    csInterface.evalScript(`getTotalLayerList()`, this.getLayerList);
     Event.$on(`buildNumber`, this.setBuild);
     Event.$on(`portNumber`, this.setPort);
   }
@@ -151,6 +158,25 @@ Vue.component('layers-list', {
   `,
   data() {
     return {
+      launch: [ 
+        {
+          depth: 0,
+          hidden: false,
+          locked: false,
+          name: 'Layer 1',
+          type: 'Layer',
+          children: [
+            {
+              depth: 1,
+              hidden: false,
+              locked: false,
+              name: 'bg',
+              type: 'PathItem',
+              // children: []
+            }
+          ]
+        }
+      ],
       total: [
         {
           name: 'Layer 1',
@@ -243,7 +269,7 @@ Vue.component('layer', {
       // return `max-width: ${}`
     },
     getLayerStyle() {
-      console.log(this.model.selected)
+      // console.log(this.model.selected)
       let style = ``;
       if (this.model.selected) {
         style += `background-color: ${this.$root.getCSS('color-selected-layer')};`
@@ -253,7 +279,7 @@ Vue.component('layer', {
       return style;
     },
     getTailStyle() {
-      console.log(this.model.selected)
+      // console.log(this.model.selected)
       let style = ``;
       if (this.model.selected) {
         style += `background-color: ${this.$root.getCSS('color-selected-layer')};`
@@ -372,7 +398,7 @@ Vue.component('layer-input', {
     },
   },
   mounted() {
-    console.log(this.model)
+    // console.log(this.model)
   },
   methods: {
     checkSize() {
