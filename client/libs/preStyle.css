@@ -28,10 +28,9 @@
   --scrollbar-thumb-radius: 20px;
   --panel-height: 50px;
   --panel-width: 50px;
-  --screen-height: calc(var(--toolbar-height)*2);
   /*  */
   
-  --toolbar-height: 2rem;
+  --toolbar-height: 1.5rem;
 
   --color-note-mid: #2e7d32;
   --color-note-dark: #005005;
@@ -125,7 +124,8 @@ textarea {
   position: absolute;
   top: calc(100vh - var(--toolbar-height));
   left: 0px;
-  height: calc(var(--toolbar-height) * .75);
+  /* height: calc(var(--toolbar-height) * .75); */
+  height: var(--toolbar-height);
   background-color: var(--color-bg);
   display: flex;
   align-items: baseline;
@@ -171,17 +171,18 @@ textarea {
 .appFooter {
   user-select: none;
   cursor: default;
-  width: 100%;
+  width: 98%;
   margin-left: .5rem;
   margin-right: .5rem;
-  margin-top: .5rem;
-  font-family: 'Raleway';
-  font-size: 1rem;
+  font-size: .9rem;
+  /* margin-top: .5rem; */
+  /* font-family: 'Raleway'; */
+  /* font-size: 1rem; */
   /* text-transform: uppercase; */
-  letter-spacing: .125rem;
+  /* letter-spacing: .125rem; */
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
 }
 
 
@@ -195,11 +196,12 @@ textarea {
 }
 
 .screen {
+  margin-top: .5rem;
   box-sizing: border-box;
   /* border: 2px solid white; */
   position: relative;
-  top: var(--toolbar-height);
-  height: calc(100vh - var(--screen-height));
+  /* top: var(--toolbar-height); */
+  height: calc(100vh - var(--toolbar-height));
   display: flex;
   flex-direction: column;
   justify-content: flex-start;

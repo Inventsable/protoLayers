@@ -7,7 +7,7 @@ Revamp of [mightyLayers](https://github.com/Inventsable/mightyLayers) while abso
 ## To-do:
 
 * ~~Basic UI~~
-* Basic backend for recursive layer crawling
+* ~~Basic backend for recursive layer crawling~~
 * Selection logic
 * Active Layer logic
 * Subtle bodymovin' animations for all icons (vanilla Layers panel has animated arrows)

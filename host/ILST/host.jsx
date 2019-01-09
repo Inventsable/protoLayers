@@ -20,11 +20,12 @@ function getLayerDetails(layer, depth) {
     var master = {
         name: layer.name,
         locked: layer.locked,
-        selected: layer.selected,
+        // selected: layer.selected,
         hidden: !layer.visible,
         children: [],
         depth: depth,
-        type: layer.typename
+        type: layer.typename,
+        label: toHex(layer.color)
     };
     if (layer.layers) {
         for (var l = 0; l < layer.layers.length; l++)

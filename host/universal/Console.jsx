@@ -45,3 +45,27 @@ function hexToRgb(hex) {
         b: parseInt(result[3], 16)
     } : null;
 }
+
+
+// Thanks @BruceB. from Premiere Pro example
+function toHex(color, delta) {
+  function computeValue(value, delta) {
+    var computedValue = !isNaN(delta) ? value + delta : value;
+    if (computedValue < 0) {
+      computedValue = 0;
+    } else if (computedValue > 255) {
+      computedValue = 255;
+    }
+
+    computedValue = Math.round(computedValue).toString(16);
+    return computedValue.length == 1 ? "0" + computedValue : computedValue;
+  }
+
+  var hex = "";
+  if (color) {
+    with (color) {
+      hex = computeValue(red, delta) + computeValue(green, delta) + computeValue(blue, delta);
+    };
+  }
+  return "#" + hex;
+}

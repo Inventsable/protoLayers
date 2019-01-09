@@ -37,9 +37,6 @@ Vue.component('protolayers', {
       :style="styleDebug()">
       <event-manager />
       <stylizer />
-      <top v-if="showTop">
-        <toolbar />
-      </top>
       <bottom>
         <foot :model="info" />
       </bottom>
@@ -53,10 +50,10 @@ Vue.component('protolayers', {
   data() {
     return {
       wakeOnly: false,
-      showTop: true,
       info: {
-        buildNumber: 0,
-        localhost: 0,
+        // buildNumber: 0,
+        // localhost: 0,
+        layercount: 0,
       }
     }
   },
@@ -98,6 +95,10 @@ Vue.component('protolayers', {
     setPort(msg) {
       this.info.localhost = msg;
     },
+    setLayercount(msg) {
+      console.log(`Number of layers: ${msg}`)
+      this.info.layercount = msg;
+    },
     getLayerList(msg) {
       // console.log(`msg is ${msg}`)
       msg = JSON.parse(msg);
@@ -105,27 +106,17 @@ Vue.component('protolayers', {
       console.log(msg);
     },
     getData(msg) {
-      // msg = JSON.parse(msg);
       console.log(`msg is ${msg}`)
-      
-      // let mirror = [];
-      // for (let i = 0; i < msg.colors.length; i++) {
-      //   const arr = msg.colors[i];
-      //   mirror = [].concat(mirror, arr);
-      // }
-      // mirror = this.$root.removeDuplicatesInArray(mirror);
-      // // this.createNodeList(mirror);
-      // console.log(`Data result is:`)
-      // console.log(mirror);
     },
   },
   mounted() {
-    this.$root.screen = this.$el.children[4];
-    this.$root.screenInner = this.$el.children[4].children[0];
-    csInterface.evalScript(`getLayerCount()`, this.getData);
+    this.$root.screen = this.$el.children[3];
+    this.$root.screenInner = this.$el.children[3].children[0];
+    csInterface.evalScript(`getLayerCount()`, this.setLayercount);
     csInterface.evalScript(`getTotalLayerList()`, this.getLayerList);
     Event.$on(`buildNumber`, this.setBuild);
     Event.$on(`portNumber`, this.setPort);
+    Event.$on(`layerCount`, this.setLayercount);
   }
 })
 Vue.component('extension', { template: `<div class="appGrid"><slot></slot></div>` })
@@ -139,9 +130,23 @@ Vue.component('foot', {
   },
   template: `
     <div class="appFooter">
-      <div>{{model.buildNumber}}</div>
-      <div>{{'localhost:' + model.localhost}}</div>
-    </div>`,
+      <div>{{fullcount}}</div>
+      <div>rest</div>
+    </div>
+  `,
+  mounted() {
+    console.log(`Layer count is ${this.model.layercount}`)
+  },
+  computed: {
+    fullcount: function() {
+      if (this.model.layercount > 1)
+        return `${this.model.layercount} Layers`
+      else if (this.model.layercount == 0)
+        return `${this.model.layercount} Layers`
+      else
+        return `${this.model.layercount} Layer`
+    } 
+  }
 })
 
 Vue.component('placeholder', {
@@ -150,10 +155,27 @@ Vue.component('placeholder', {
   `
 })
 
+Vue.component('layer-drop', {
+  props: {
+    model: Object,
+  },
+  template: `
+    <div v-if="model.open" class="layer-droplist-wrap">
+      <layer v-for="(layer,key) in model.children" :key="key" :model="layer" />
+    </div>
+  `,
+  mounted() {
+    console.log('list is online')
+    console.log(this.model)
+  }
+})
+
 Vue.component('layers-list', {
   template: `
-    <div class="layer-list-wrap">
-      <layer v-for="(layer,key) in total" :key="key" :model="layer" />
+    <div class="layer-screen-wrap">
+      <div class="layer-list-wrap">
+        <layer v-for="(layer,key) in launch" :key="key" :model="layer" />
+      </div>
     </div>
   `,
   data() {
@@ -162,15 +184,54 @@ Vue.component('layers-list', {
         {
           depth: 0,
           hidden: false,
+          label: '#4f80ff',
           locked: false,
           name: 'Layer 1',
           type: 'Layer',
+          //
+          selected: false,
+          open: true,
           children: [
             {
               depth: 1,
               hidden: false,
               locked: false,
+              name: 'test',
+              selected: false,
+              type: 'PathItem',
+              label: '#4f80ff',
+              // children: []
+            },
+            {
+              depth: 1,
+              hidden: false,
+              locked: false,
               name: 'bg',
+              selected: false,
+              type: 'PathItem',
+              label: '#4f80ff',
+              // children: []
+            }
+          ]
+        },
+        {
+          depth: 0,
+          hidden: false,
+          label: '#ff04f8',
+          locked: true,
+          name: 'Layer 2',
+          type: 'Layer',
+          //
+          selected: false,
+          open: true,
+          children: [
+            {
+              depth: 1,
+              hidden: false,
+              label: '#ff04f8',
+              locked: true,
+              name: 'test',
+              selected: false,
               type: 'PathItem',
               // children: []
             }
@@ -217,25 +278,35 @@ Vue.component('layers-list', {
   // methods
 })
 
+//          <layer-icon @click="toggleOpenStatus" @mouseover="checker" :type="getLayerStatusType()" />
+
 Vue.component('layer', {
   props: {
     model: Object,
   },
   template: `
-    <div class="layer-wrap" :style="getLayerStyle()">
-      <div class="layer-head" :style="getWrapWidth()">
-        <layer-icon type="visible" />
-        <layer-icon type="lock" />
-        <layer-label :color="model.label" :select="false" />
-        <layer-tab v-for="(tab,key) in depth" :key="key" />
-        <layer-icon :type="(model.open) ? 'arrow-down' : 'arrow-right'" />
-        <layer-preview />
-        <layer-input :model="model" />
+    <div class="layer-subwrap">
+      <div class="layer-wrap" :style="getLayerStyle()">
+        <div class="layer-head" :style="getWrapWidth()">
+          <layer-icon type="visible" />
+          <layer-icon type="(model.locked) ? 'lock' : 'blank'" />
+          <layer-label :color="model.label" :select="false" />
+          <layer-tab v-for="(tab,key) in depth" :key="key" />
+          <div class="layer-icon" @click="toggleOpenStatus">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+              <path v-if="hasChildren && !model.open" class="layer-icon-contents" :style="getSVGStyle()" d="M4.56,16.53a1,1,0,0,1-.64-.23,1,1,0,0,1-.13-1.41L8.11,9.72,3.83,5.15A1,1,0,0,1,5.29,3.78L9.72,8.51a1.77,1.77,0,0,1,.06,2.33L5.33,16.17A1,1,0,0,1,4.56,16.53Zm3.7-6.66h0Z"/>
+              <path v-if="hasChildren && model.open" class="layer-icon-contents" :style="getSVGStyle()" d="M3.47,9.07a1,1,0,0,1,.23-.64A1,1,0,0,1,5.11,8.3l5.17,4.32,4.57-4.28A1,1,0,0,1,16.22,9.8l-4.73,4.43a1.77,1.77,0,0,1-2.33.06L3.83,9.84A1,1,0,0,1,3.47,9.07Zm6.66,3.7h0Z"/>
+            </svg>
+          </div>
+          <layer-preview />
+          <layer-input :model="model" />
+        </div>
+        <div class="layer-tail" :style="getTailStyle()">
+          <layer-icon :type="(model.active) ? 'radio-on' : 'radio-off'" />
+          <layer-label :color="model.label" :select="true" />
+        </div>
       </div>
-      <div class="layer-tail" :style="getTailStyle()">
-        <layer-icon :type="(model.active) ? 'radio-on' : 'radio-off'" />
-        <layer-label :color="model.label" :select="true" />
-      </div>
+      <layer-drop v-if="hasChildren" :model="model" />
     </div>
   `,
   data() {
@@ -244,12 +315,32 @@ Vue.component('layer', {
       overflowing: false,
     }
   },
+  computed: {
+    hasChildren: function() {
+      if (/group|layer/i.test(this.model.type))
+        return (this.model.children.length) ? true : false;
+      else 
+        return false;
+    },
+    iconColor: function () { return `fill: ${this.$root.getCSS('color-icon')}` }
+  },
   mounted() {
     this.buildDepth();
     Event.$on('overflowingTrue', this.overflowingTrue);
     Event.$on('overflowingFalse', this.overflowingFalse);
   },
   methods: {
+    getSVGStyle() {
+      let style = `width: ${this.$root.getCSS('icon-height')};${this.iconColor};`;
+      return style;
+    },
+    toggleOpenStatus() {
+      console.log('Click!')
+      this.model.open = !this.model.open;
+    },
+    getLayerStatusType() {
+      return (/layer|group/i.test(this.model.type)) ? true : false;
+    },
     overflowTrue() {
       this.overflowing = true;
       this.$root.setCSS('tail-offset', '3.75rem');
@@ -315,6 +406,18 @@ Vue.component('layer-label', {
   }
 })
 
+
+// Vue.component('layer-arrow', {
+//   template: `
+//     <div class="layer-icon">
+//       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+//         <path v-if="type == 'arrow-right'" :class="getSVGClass()" :style="getSVGStyle()" d="M4.56,16.53a1,1,0,0,1-.64-.23,1,1,0,0,1-.13-1.41L8.11,9.72,3.83,5.15A1,1,0,0,1,5.29,3.78L9.72,8.51a1.77,1.77,0,0,1,.06,2.33L5.33,16.17A1,1,0,0,1,4.56,16.53Zm3.7-6.66h0Z"/>
+//         <path v-if="type == 'arrow-down'" :class="getSVGClass()" :style="getSVGStyle()" d="M3.47,9.07a1,1,0,0,1,.23-.64A1,1,0,0,1,5.11,8.3l5.17,4.32,4.57-4.28A1,1,0,0,1,16.22,9.8l-4.73,4.43a1.77,1.77,0,0,1-2.33.06L3.83,9.84A1,1,0,0,1,3.47,9.07Zm6.66,3.7h0Z"/>
+//       </svg>
+//     </div>
+//   `,
+// })
+
 Vue.component('layer-icon', {
   props: {
     type: String,
@@ -322,10 +425,7 @@ Vue.component('layer-icon', {
   template: `
     <div 
       class="layer-icon"
-      :style="getWrapStyle()"
-      @mouseover="hover = true" 
-      @mouseout="hover = false" 
-      @click="doAction"
+      :style="getWrapStyle()" 
       v-if="type !== 'none'">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
         <path v-if="type == 'visible'" :class="getSVGClass()" :style="getSVGStyle()" d="M16.75,8.18a8.82,8.82,0,0,0-13.5,0l-1,1.23a.93.93,0,0,0,0,1.18l1,1.23a8.82,8.82,0,0,0,13.5,0l1-1.23a.93.93,0,0,0,0-1.18ZM10,13.23A3.23,3.23,0,1,1,13.23,10,3.22,3.22,0,0,1,10,13.23Zm1.58-3.47a1.94,1.94,0,0,1,0,.24A1.6,1.6,0,1,1,10,8.4l.24,0A1.61,1.61,0,0,0,11.58,9.76Z"/>
@@ -352,7 +452,6 @@ Vue.component('layer-icon', {
     },
     getSVGStyle() {
       let style = `width: ${this.$root.getCSS('icon-height')};${this.iconColor};`;
-
       return style;
     },
     getSVGClass() {
