@@ -1,10 +1,22 @@
-function init() {
-    console.log('Hello')
-    return 'there'
-}
+let pinList = [];
 
 function getPIN() {
-    return Math.floor(Math.random() * 16777215).toString(16);
+    return checkPIN(Math.floor(Math.random() * 16777215).toString(16));
+}
+
+function checkPIN(pin) {
+    var err = 0;
+    for (var i = 0; i < pinList.length; i++) {
+        var target = pinList[i];
+        if (pin === target)
+            err++;
+    }
+    if (err < 1) {
+        pinList.push(pin);
+        return pin;
+    } else {
+        return getPIN();
+    }
 }
 
 function getLayerCount() {
@@ -17,6 +29,7 @@ function getPageItemCount() {
 
 function getTotalLayerList() {
     let mirror = [];
+    pinList = [];
     for (let i = 0; i < app.activeDocument.layers.length; i++) {
         const layer = app.activeDocument.layers[i];
         mirror.push(getLayerDetails(layer, 0, i, 0))
@@ -25,7 +38,7 @@ function getTotalLayerList() {
 }
 
 function getLayerDetails(layer, depth, index, parent) {
-    parent = parent||null;
+    parent = parent || null;
     let master = {
         parent: parent,
         name: layer.name,
@@ -66,10 +79,56 @@ function getLayerDetails(layer, depth, index, parent) {
                 child.name = '\<' + item.typename.replace(/Item/, '') + '\>';
             if (/group/i.test(item.typename))
                 child['children'] = getLayerDetails(item, depth + 1, i, index);
-            else   
+            else
                 child['children'] = [];
             master.children.push(child);
         }
     }
     return master;
+}
+
+function getPageItemDepth(item) {
+    findPageItemInLayers(item);
+}
+
+function newPageItemDetails(item) {
+    let child = {
+        index: getPageItemDepth(item)[1],
+        name: item.name,
+        type: item.typename,
+        locked: item.locked,
+        selected: item.selected,
+        label: toHex(item.layer.color),
+        active: false,
+        open: false,
+        hidden: item.hidden,
+        depth: getPageItemDepth(item)[0],
+        parent: item.layer.index,
+        pin: getPIN(),
+    };
+}
+
+function findPageItemInLayers(item) {
+    for (let i = 0; i < app.activeDocument.layers.length; i++) {
+        const layer = app.activeDocument.layers[i];
+        searchForPageItem(layer, 0, item)
+    }
+}
+
+function searchForPageItem(group, depth, item) {
+    if (group.layers) {
+        for (let i = 0; i < group.layers.length; i++) {
+            const layer = group.layers[i];
+            searchForPageItem(layer, depth + 1, item)
+        }
+    }
+    if (group.pageItems.length) {
+        for (var p = 0; p < group.pageItems.length; p++) {
+            var pItem = group.pageItems[p];
+            if (pItem == item)
+                return [depth, p];
+        }
+        if (/group/i.test(group.typename))
+            searchForPageItem(group, depth + 1, item);
+    }
 }

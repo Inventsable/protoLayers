@@ -5,18 +5,7 @@
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
-      <Host Name="PHXS" Version="[20,99.9]" />
-      <Host Name="IDSN" Version="[14,99.9]" />
-      <Host Name="AICY" Version="[14,99.9]" />
       <Host Name="ILST" Version="[23,99.9]" />
-      <Host Name="PPRO" Version="[23,99.9]" />
-      <Host Name="PRLD" Version="[8,99.9]" />
-      <Host Name="AEFT" Version="[16,99.9]" />
-      <Host Name="FLPR" Version="[19,99.9]" />
-      <Host Name="AUDT" Version="[12,99.9]" />
-      <Host Name="DRWV" Version="[19,99.9]" />
-      <Host Name="KBGR" Version="[9,99.9]" />
-      <Host Name="RUSH" Version="[1,99.9]" />
     </HostList>
     <LocaleList>
       <Locale Code="All" />

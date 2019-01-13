@@ -1,9 +1,21 @@
-function init() {
-    console.log('Hello');
-    return 'there';
-}
+var pinList = [];
 function getPIN() {
-    return Math.floor(Math.random() * 16777215).toString(16);
+    return checkPIN(Math.floor(Math.random() * 16777215).toString(16));
+}
+function checkPIN(pin) {
+    var err = 0;
+    for (var i = 0; i < pinList.length; i++) {
+        var target = pinList[i];
+        if (pin === target)
+            err++;
+    }
+    if (err < 1) {
+        pinList.push(pin);
+        return pin;
+    }
+    else {
+        return getPIN();
+    }
 }
 function getLayerCount() {
     return app.activeDocument.layers.length;
@@ -13,6 +25,7 @@ function getPageItemCount() {
 }
 function getTotalLayerList() {
     var mirror = [];
+    pinList = [];
     for (var i = 0; i < app.activeDocument.layers.length; i++) {
         var layer = app.activeDocument.layers[i];
         mirror.push(getLayerDetails(layer, 0, i, 0));
@@ -67,4 +80,46 @@ function getLayerDetails(layer, depth, index, parent) {
         }
     }
     return master;
+}
+function getPageItemDepth(item) {
+    findPageItemInLayers(item);
+}
+function newPageItemDetails(item) {
+    var child = {
+        index: getPageItemDepth(item)[1],
+        name: item.name,
+        type: item.typename,
+        locked: item.locked,
+        selected: item.selected,
+        label: toHex(item.layer.color),
+        active: false,
+        open: false,
+        hidden: item.hidden,
+        depth: getPageItemDepth(item)[0],
+        parent: item.layer.index,
+        pin: getPIN()
+    };
+}
+function findPageItemInLayers(item) {
+    for (var i = 0; i < app.activeDocument.layers.length; i++) {
+        var layer = app.activeDocument.layers[i];
+        searchForPageItem(layer, 0, item);
+    }
+}
+function searchForPageItem(group, depth, item) {
+    if (group.layers) {
+        for (var i = 0; i < group.layers.length; i++) {
+            var layer = group.layers[i];
+            searchForPageItem(layer, depth + 1, item);
+        }
+    }
+    if (group.pageItems.length) {
+        for (var p = 0; p < group.pageItems.length; p++) {
+            var pItem = group.pageItems[p];
+            if (pItem == item)
+                return [depth, p];
+        }
+        if (/group/i.test(group.typename))
+            searchForPageItem(group, depth + 1, item);
+    }
 }
