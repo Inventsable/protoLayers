@@ -42,7 +42,7 @@ Vue.component('protolayers', {
       </bottom>
       <panel>
         <center>
-          <layers-list />
+          <layers-list :model="layerlist"/>
         </center>
       </panel>
     </extension>
@@ -51,10 +51,9 @@ Vue.component('protolayers', {
     return {
       wakeOnly: false,
       info: {
-        // buildNumber: 0,
-        // localhost: 0,
         layercount: 0,
-      }
+      },
+      layerlist: [],
     }
   },
   computed: {
@@ -87,27 +86,54 @@ Vue.component('protolayers', {
         }
         Event.$emit('clearStats');
       }
-      // this.checkDebug();
     },
-    setBuild(msg) {
-      this.info.buildNumber = msg;
-    },
-    setPort(msg) {
-      this.info.localhost = msg;
-    },
-    setLayercount(msg) {
-      console.log(`Number of layers: ${msg}`)
-      this.info.layercount = msg;
-    },
+    setBuild(msg) { this.info.buildNumber = msg; },
+    setPort(msg) { this.info.localhost = msg; },
+    setLayercount(msg) { this.info.layercount = msg; },
     getLayerList(msg) {
-      // console.log(`msg is ${msg}`)
       msg = JSON.parse(msg);
-      console.log(`layerlist is:`)
-      console.log(msg);
+      this.layerlist = msg;
+      console.log(this.layerlist);
     },
-    getData(msg) {
-      console.log(`msg is ${msg}`)
+    changeSelection(msg) {
+      msg = JSON.parse(msg);
+      // console.log('Changing selection to:')
+      // console.log(msg);
+      Event.$emit('clearAllSelected');
+      let result = this.findInLayers(this.layerlist, 'start', msg, 'select');
+      // console.log(result);
+      // result.selected = true;
     },
+    findInLayers(group, heritage, obj, action) {
+      // console.log(group)
+      const self = this;
+      for (let i = 0; i < group.length; i++) {
+        const layer = group[i];
+        if ((layer.name == obj.name) 
+        && (layer.index == obj.index) 
+        && (layer.depth == obj.depth)
+        && (layer.parent == obj.parent)) {
+          // console.log('Found match');
+          // console.log(layer)
+          if (action == 'select') {
+            layer.selected = true;
+            if (heritage !== 'start') {
+              for (let h = 0; h < heritage.length; h++) {
+                const ancestor = heritage[h];
+                ancestor.selected = true;
+              }
+              console.log('Selecting heritage')
+            }
+          }
+          return layer;
+        } else {
+          if (layer.children.length) {
+            for (let c = 0; c < layer.children.length; c++)
+              self.findInLayers(layer.children, layer, obj, action);
+          }
+        }
+      }
+    }
   },
   mounted() {
     this.$root.screen = this.$el.children[3];
@@ -116,6 +142,7 @@ Vue.component('protolayers', {
     csInterface.evalScript(`getTotalLayerList()`, this.getLayerList);
     Event.$on(`buildNumber`, this.setBuild);
     Event.$on(`portNumber`, this.setPort);
+    Event.$on('selectionChange', this.changeSelection);
     Event.$on(`layerCount`, this.setLayercount);
   }
 })
@@ -130,8 +157,11 @@ Vue.component('foot', {
   },
   template: `
     <div class="appFooter">
-      <div>{{fullcount}}</div>
-      <div>rest</div>
+      <div class="appFooterL">
+        <div>{{fullcount}}</div>
+        <toggle-edit></toggle-edit>
+      </div>
+      <adobe-toolbar-buttons />
     </div>
   `,
   mounted() {
@@ -149,6 +179,109 @@ Vue.component('foot', {
   }
 })
 
+Vue.component('adobe-toolbar-buttons', {
+  template: `
+    <div class="appFooterR">
+      <div 
+        v-for="button in buttons" 
+        class="footer-button" 
+        :style="getButtonStyle(button.name)"
+        :title="button.title">
+        <toolbar-icon :type="button.name" />
+      </div>
+    </div>  
+  `,
+  data() {
+    return {
+      msg: 'Hello world',
+      contexts: [ 
+        {
+          name: 'all',
+          available: ['export', 'find', 'mask', 'newsublayer', 'newlayer', 'trash'],
+        },
+        {
+          name: 'onlayer',
+          available: ['export', 'mask', 'newsublayer', 'newlayer', 'trash'],
+        },
+        {
+          name: 'noselect',
+          available: ['newlayer'],
+        },
+
+      ],
+
+      buttons: [
+        {
+          name: 'export',
+          title: 'Collect For Export'
+        },
+        {
+          name: 'find',
+          title: 'Locate Object'
+
+        },
+        {
+          name: 'mask',
+          title: 'Make/Release Clipping Mask'
+
+        },
+        {
+          name: 'newsublayer',
+          title: 'Create New Sub Layer'
+
+        },
+        {
+          name: 'newlayer',
+          title: 'Create New Layer'
+
+        },
+        {
+          name: 'trash',
+          title: 'Delete Selection'
+
+        },
+      ]
+    }
+  },
+  methods: {
+    getButtonStyle(name) {
+      let style = '';
+
+      return style;
+    },
+  }
+}) 
+
+Vue.component('toggle-edit', {
+  template: `
+    <div class="toggle-edit-wrap" @click="toggle">
+      {{label}}
+    </div>
+  `,
+  data() {
+    return {
+      editMode: false,
+    }
+  },
+  computed: {
+    label: function() {
+      return `Toggle to ${this.editMode ? 'Default' : 'Edit'}`
+    }
+  },
+  methods: {
+    toggle() {
+      this.editMode = !this.editMode;
+      if (this.editMode) {
+        Event.$emit('setEditOn');
+        Event.$emit('globalEditOn');
+      } else {
+        Event.$emit('setEditOff');
+        Event.$emit('globalEditOff');
+      }
+    }
+  },
+})
+
 Vue.component('placeholder', {
   template: `
     <div class="placeholder">Test</div>
@@ -158,136 +291,73 @@ Vue.component('placeholder', {
 Vue.component('layer-drop', {
   props: {
     model: Object,
+    parentindex: Number,
+    refer: String,
   },
   template: `
     <div v-if="model.open" class="layer-droplist-wrap">
-      <layer v-for="(layer,key) in model.children" :key="key" :model="layer" />
+      <layer v-for="(layer,key) in model.children" :key="key" :refer="getReference(key)" :index="key" :model="layer" />
     </div>
   `,
+  computed: {
+    newIndex: function() { return this.parentindex; },
+    modifier: function() { return this.cipher[(this.newIndex % this.cipher.length)]; },
+  },
+  methods: {
+    getReference(key) { return `${this.refer}${key}` }
+  },
+  data() {
+    return {
+      cipher: ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'],
+    }
+  },  
   mounted() {
-    console.log('list is online')
-    console.log(this.model)
+    // console.log('list is online')
+    // console.log(this.modifier);
   }
 })
 
 Vue.component('layers-list', {
+  props: {
+    model: Array,
+  },
   template: `
     <div class="layer-screen-wrap">
       <div class="layer-list-wrap">
-        <layer v-for="(layer,key) in launch" :key="key" :model="layer" />
+        <layer v-for="(layer,key) in model" :key="key" :refer="getCipher(key)" :index="key" :model="layer" />
       </div>
     </div>
   `,
+  methods: {
+    getCipher(num) {
+      if (num % this.cipher.length > 1)
+        num = Number('' + 0 + num % this.cipher.length)
+      // console.log(num);
+      // console.log(num % this.cipher.length)
+      return this.cipher[num];
+    }
+  },
   data() {
     return {
-      launch: [ 
-        {
-          depth: 0,
-          hidden: false,
-          label: '#4f80ff',
-          locked: false,
-          name: 'Layer 1',
-          type: 'Layer',
-          //
-          selected: false,
-          open: true,
-          children: [
-            {
-              depth: 1,
-              hidden: false,
-              locked: false,
-              name: 'test',
-              selected: false,
-              type: 'PathItem',
-              label: '#4f80ff',
-              // children: []
-            },
-            {
-              depth: 1,
-              hidden: false,
-              locked: false,
-              name: 'bg',
-              selected: false,
-              type: 'PathItem',
-              label: '#4f80ff',
-              // children: []
-            }
-          ]
-        },
-        {
-          depth: 0,
-          hidden: false,
-          label: '#ff04f8',
-          locked: true,
-          name: 'Layer 2',
-          type: 'Layer',
-          //
-          selected: false,
-          open: true,
-          children: [
-            {
-              depth: 1,
-              hidden: false,
-              label: '#ff04f8',
-              locked: true,
-              name: 'test',
-              selected: false,
-              type: 'PathItem',
-              // children: []
-            }
-          ]
-        }
-      ],
-      total: [
-        {
-          name: 'Layer 1',
-          label: '#4f80ff',
-          active: true,
-          selected: true,
-          hidden: false,
-          locked: false,
-          depth: 0,
-          open: false,
-          children: [],
-        },
-        {
-          name: 'Layer 2',
-          label: '#ff04f8',
-          active: false,
-          selected: false,
-          hidden: false,
-          locked: false,
-          depth: 1,
-          open: false,
-          children: [],
-        },
-        {
-          name: 'Layer 3',
-          label: '#04fff8',
-          active: false,
-          selected: false,
-          hidden: false,
-          locked: false,
-          depth: 2,
-          open: false,
-          children: [],
-        },
-      ]
+      cipher: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'],
     }
   },
   // methods
 })
 
-//          <layer-icon @click="toggleOpenStatus" @mouseover="checker" :type="getLayerStatusType()" />
+//     <layer-icon @click="toggleOpenStatus" @mouseover="checker" :type="getLayerStatusType()" />
 
 Vue.component('layer', {
   props: {
     model: Object,
+    // index: String,
+    index: Number,
+    refer: String,
   },
   template: `
     <div class="layer-subwrap">
       <div class="layer-wrap" :style="getLayerStyle()">
-        <div class="layer-head" :style="getWrapWidth()">
+        <div class="layer-head">
           <layer-icon type="visible" />
           <layer-icon type="(model.locked) ? 'lock' : 'blank'" />
           <layer-label :color="model.label" :select="false" />
@@ -298,24 +368,36 @@ Vue.component('layer', {
               <path v-if="hasChildren && model.open" class="layer-icon-contents" :style="getSVGStyle()" d="M3.47,9.07a1,1,0,0,1,.23-.64A1,1,0,0,1,5.11,8.3l5.17,4.32,4.57-4.28A1,1,0,0,1,16.22,9.8l-4.73,4.43a1.77,1.77,0,0,1-2.33.06L3.83,9.84A1,1,0,0,1,3.47,9.07Zm6.66,3.7h0Z"/>
             </svg>
           </div>
+        </div>
+        <div class="layer-body" @click="onSelection">
           <layer-preview />
-          <layer-input :model="model" />
+          <layer-input v-show="editMode" :model="model" :refer="refer" :index="index" />
+          <layer-name v-show="!editMode" :model="model" :refer="refer" :index="index" />
+          <div class="layer-blank" :style="getLayerStyle()"></div>
         </div>
         <div class="layer-tail" :style="getTailStyle()">
           <layer-icon :type="(model.active) ? 'radio-on' : 'radio-off'" />
           <layer-label :color="model.label" :select="true" />
         </div>
       </div>
-      <layer-drop v-if="hasChildren" :model="model" />
+      <layer-drop v-if="hasChildren" :model="model" :parentindex="index" :refer="refer" />
     </div>
   `,
   data() {
     return {
       depth: [],
       overflowing: false,
+      editMode: false,
     }
   },
   computed: {
+    cipher: function() {
+      if (/\w/.test(this.index)) {
+        return true;
+      } else {
+        return false;
+      }
+    },
     hasChildren: function() {
       if (/group|layer/i.test(this.model.type))
         return (this.model.children.length) ? true : false;
@@ -326,21 +408,43 @@ Vue.component('layer', {
   },
   mounted() {
     this.buildDepth();
+    Event.$on(`setEditOnInput${this.refer}`, this.editModeOnSingle);
+    Event.$on(`setEditOffInput${this.refer}`, this.editModeOffSingle);
+    Event.$on('setEditOn', this.editModeOn);
+    Event.$on('setEditOff', this.editModeOff);
     Event.$on('overflowingTrue', this.overflowingTrue);
     Event.$on('overflowingFalse', this.overflowingFalse);
+    Event.$on('clearAllSelected', this.clearAllSelected);
   },
   methods: {
-    getSVGStyle() {
-      let style = `width: ${this.$root.getCSS('icon-height')};${this.iconColor};`;
-      return style;
+    editModeOnSingle() {
+      this.editMode = true;
+      console.log('Setting edit on:')
+      console.log(this.refer);
+      Event.$emit(`setFocusInput${this.refer}`);
     },
-    toggleOpenStatus() {
-      console.log('Click!')
-      this.model.open = !this.model.open;
+    editModeOffSingle() {
+      console.log(`Received message to clear edit from ${this.refer}`)
+      this.editMode = false;
+      Event.$emit(`resetLayerName${this.refer}`)
+    },  
+    editModeOn() { this.editMode = true; },
+    editModeOff() {
+      this.editMode = false; 
     },
-    getLayerStatusType() {
-      return (/layer|group/i.test(this.model.type)) ? true : false;
+    clearAllSelected() {
+      console.log('clearing selection')  
+      this.model.selected = false; 
     },
+    getSVGStyle() { return `width: ${this.$root.getCSS('icon-height')};${this.iconColor};`; },
+    onSelection() {
+      if (!this.$root.Shift)
+        Event.$emit('clearAllSelected')
+      if (!this.model.selected)
+        this.model.selected = true;
+    },
+    toggleOpenStatus() { this.model.open = !this.model.open; },
+    getLayerStatusType() { return (/layer|group/i.test(this.model.type)) ? true : false; },
     overflowTrue() {
       this.overflowing = true;
       this.$root.setCSS('tail-offset', '3.75rem');
@@ -356,21 +460,16 @@ Vue.component('layer', {
         mirror.push({ key: i })
       this.depth = mirror;
     },
-    getWrapWidth() {
-      // return `max-width: ${}`
-    },
     getLayerStyle() {
-      // console.log(this.model.selected)
       let style = ``;
       if (this.model.selected) {
         style += `background-color: ${this.$root.getCSS('color-selected-layer')};`
       } else {
-        style += `background-color: transparent;`
+        style += `background-color: ${this.$root.getCSS('color-bg')};`
       }
       return style;
     },
     getTailStyle() {
-      // console.log(this.model.selected)
       let style = ``;
       if (this.model.selected) {
         style += `background-color: ${this.$root.getCSS('color-selected-layer')};`
@@ -386,6 +485,43 @@ Vue.component('layer', {
 Vue.component('layer-tab', { template: `<div class="layer-tab"></div>` })
 Vue.component('layer-preview', { template: `<div class="layer-preview"></div>` })
 
+Vue.component('layer-name', {
+  props: {
+    model: Object,
+    index: Number,
+    refer: String,
+    // index: String,
+  },
+  template: `
+    <div class="name-wrap">
+      <span v-on:dblclick="toggleEdit" v-if="!isEdit" class="layer-name">{{model.name}}</span>
+    </div>
+  `,
+      // <layer-input v-else :model="model" :index="index" />
+  data() {
+    return {
+      isEdit: false,
+    }
+  },
+  mounted() {
+    Event.$on(`resetLayerName${this.refer}`, this.editModeOff);
+  },
+  methods: {
+    editModeOff() {
+      this.isEdit = false;
+    },
+    toggleEdit() {
+      this.isEdit = !this.isEdit;
+      if (this.isEdit) {
+        // Event.$emit(`setFocusInput${this.refer}`)
+        Event.$emit(`setEditOnInput${this.refer}`);
+      } else {
+        // Event.$emit(`clearFocusInput${this.refer}`)
+        Event.$emit(`setEditOffInput${this.refer}`);
+      }
+    }
+  }
+})
 
 Vue.component('layer-label', {
   props: {
@@ -398,9 +534,8 @@ Vue.component('layer-label', {
   methods: {
     getLabelColor() {
       let style = `background-color:${this.color};`;
-      if (this.select) {
+      if (this.select)
         style += 'width:6px;height:6px;border-color: black;'
-      }
       return style;
     }
   }
@@ -417,6 +552,59 @@ Vue.component('layer-label', {
 //     </div>
 //   `,
 // })
+
+Vue.component('toolbar-icon', {
+  props: {
+    type: String,
+  },
+  template: `
+    <div 
+      class="toolbar-icon"
+      :style="getWrapStyle()" 
+      v-if="type !== 'none'">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+        <path v-if="type == 'newlayer'" :class="getSVGClass()" :style="getSVGStyle()" d="M17.82,2.18V17.82H9.69v-7.5H2.18V2.18ZM8,12v5.29L2.73,12Z"/>
+        <path v-if="type == 'find'" :class="getSVGClass()" :style="getSVGStyle()" d="M12.17.66A7.15,7.15,0,0,0,6.45,12.13L1,17.63A1,1,0,0,0,1,19a1,1,0,0,0,1.41,0l5.5-5.49A7.16,7.16,0,1,0,12.17.66Zm0,12.34a5.17,5.17,0,1,1,5.17-5.17A5.18,5.18,0,0,1,12.17,13Z"/>
+        <path v-if="type == 'trash'" :class="getSVGClass()" :style="getSVGStyle()" d="M18.17,3.38H14A3.56,3.56,0,0,0,10.53.75H9.43A3.58,3.58,0,0,0,6,3.38H1.83a1,1,0,0,0,0,2h.84V17.54a1.71,1.71,0,0,0,1.71,1.71h11.2a1.71,1.71,0,0,0,1.71-1.71V5.38h.88a1,1,0,0,0,0-2ZM9.43,2.75h1.1a1.52,1.52,0,0,1,1.24.63H8.18A1.56,1.56,0,0,1,9.43,2.75Zm5.86,14.5H4.67V5.38H15.29ZM7.35,7v9.28a.5.5,0,0,1-.5.5.5.5,0,0,1-.5-.5V7a.51.51,0,0,1,.5-.5A.5.5,0,0,1,7.35,7Zm2.9,0v9.28a.5.5,0,0,1-1,0V7a.5.5,0,1,1,1,0Zm2.9,0v9.28a.5.5,0,0,1-.5.5.5.5,0,0,1-.5-.5V7a.5.5,0,0,1,.5-.5A.51.51,0,0,1,13.15,7Z"/>
+        <path v-if="type == 'export'" :class="getSVGClass()" :style="getSVGStyle()" d="M19.2.8V8.57h-2V4.22L12.45,9,11,7.55,15.78,2.8H11.43V.8ZM13.72,17.2H2.8V6.28H8.72v-2H.8V19.2H15.72v-8h-2Z"/>
+        <path v-if="type == 'mask'" :class="getSVGClass()" :style="getSVGStyle()" d="M17,17.85H7.25A.87.87,0,0,1,6.38,17V7.23a.88.88,0,0,1,.87-.88H17a.89.89,0,0,1,.88.88V17A.88.88,0,0,1,17,17.85Zm-9.62-1h9.5V7.35H7.38Z"/>
+        <path v-if="type == 'mask'" :class="getSVGClass()" :style="getSVGStyle('mask')" d="M12.75,2.15H3A.87.87,0,0,0,2.13,3v9.75a.88.88,0,0,0,.87.88h9.75a.89.89,0,0,0,.88-.88V3A.88.88,0,0,0,12.75,2.15Zm-9.62,1h9.5V6.4H7.25a.87.87,0,0,0-.87.87v5.38H3.13Z"/>
+      </svg>
+    </div>
+  `,
+  data() {
+    return {
+      hover: false,
+    }
+  },
+  computed: {
+    iconColor: function () {
+      return `fill: ${this.$root.getCSS('color-icon')}` 
+    }
+  },
+  methods: {
+    doAction() {
+      // console.log(`Clicked on ${this.type}`)
+    },
+    getSVGStyle(name) {
+      name = name|false;
+      let style = `width: ${this.$root.getCSS('icon-height')};${this.iconColor};`;
+      if (name) {
+        style += `opacity: .5;`
+      }
+      return style;
+    },
+    getSVGClass() {
+      return `toolbar-icon-contents`
+    },
+    getWrapStyle() {
+      let style = ``
+
+      return style;
+    }
+  }
+
+})
 
 Vue.component('layer-icon', {
   props: {
@@ -475,12 +663,15 @@ Vue.component('layer-icon', {
 Vue.component('layer-input', {
   props: {
     model: Object,
+    index: Number,
+    refer: String,
   },
   template: `
     <div class="wrap-input">
       <input 
+        :ref="refer"
         :class="getClass()"
-        :style="checkSize()"
+        :style="checkStyle()"
         @keyup.enter="submitTest()"
         v-model="msg" 
         :placeholder="model.name""/>
@@ -489,6 +680,8 @@ Vue.component('layer-input', {
   data() {
     return {
       msg: '',
+      elt: {},
+      globalEditMode: false,
     }
   },
   computed: {
@@ -497,10 +690,41 @@ Vue.component('layer-input', {
     },
   },
   mounted() {
-    // console.log(this.model)
+    this.elt = this.$el.children[0];
+    this.elt.addEventListener('blur', this.eraseEdit);
+    this.elt.addEventListener('focus', this.isFocused);
+    // console.log(this.$refs);
+    Event.$on('globalEditOn', this.setGlobalOn);
+    Event.$on('globalEditOff', this.setGlobalOff);
+    Event.$on(`setFocusInput${this.refer}`, this.setFocus);
+    Event.$on(`clearFocusInput${this.refer}`, this.clearFocus)
   },
   methods: {
-    checkSize() {
+    setGlobalOff() {
+      this.globalEditMode = false;
+    },
+    setGlobalOn() {
+      this.globalEditMode = true;
+    },
+    isFocused() {
+      Event.$emit(`selectionChange`, JSON.stringify(this.model));
+    },
+    eraseEdit() {
+      if (!this.globalEditMode) {
+        console.log(`Sending request off for ${this.refer}`)
+        Event.$emit(`setEditOffInput${this.refer}`);
+      }
+    },
+    setFocus() {
+      console.log('Setting focus to:');
+      console.log(this.$refs);
+      this.$nextTick(() => this.$refs[this.refer].focus());
+    },
+    clearFocus() {
+      console.log('Clearing focus')
+      this.$nextTick(() => this.$refs[this.refer].blur());
+    },
+    checkStyle() {
       let style = '';
       if (this.model.selected) {
         style += `background-color: ${this.$root.getCSS('color-selected-layer')};`
@@ -841,14 +1065,14 @@ Vue.component('stylizer', {
   `,
   data() {
     return {
-      cssOrder: ['bg', 'icon', 'border', 'button-hover', 'button-active', 'button-disabled', 'text-active', 'text-default', 'text-disabled', 'input-focus', 'input-idle', 'scrollbar', 'scrollbar-thumb', 'scrollbar-thumb-hover', 'scrollbar-thumb-width', 'scrollbar-thumb-radius'],
+      cssOrder: ['bg', 'icon', 'border', 'toolbar-btn-hover', 'toolbar-btn-border-hover', 'button-hover', 'button-active', 'button-disabled', 'text-active', 'text-default', 'text-disabled', 'input-focus', 'input-idle', 'scrollbar', 'scrollbar-thumb', 'scrollbar-thumb-hover', 'scrollbar-thumb-width', 'scrollbar-thumb-radius'],
       activeStyle: [],
       styleList: {
         ILST: {
           lightest: ['#f0f0f0', '#535353', '#dcdcdc', '#f9f9f9', '#bdbdbd', '#e6e6e6', '#484848', '#484848', '#c6c6c6', '#ffffff', '#ffffff', '#fbfbfb', '#dcdcdc', '#a6a6a6', '20px', '20px'],
           light: ['#b8b8b8', '#404040', '#5f5f5f', '#dcdcdc', '#969696', '#b0b0b0', '#101010', '#101010', '#989898', '#e3e3e3', '#e3e3e3', '#c4c4c4', '#a8a8a8', '#7b7b7b', '20px', '10px'],
           dark: ['#535353', '#c2c2c2', '#5f5f5f', '#4a4a4a', '#404040', '#5a5a5a', '#d8d8d8', '#d5d5d5', '#737373', '#ffffff', '#474747', '#4b4b4b', '#606060', '#747474', '20px', '10px'],
-          darkest: ['#323232', '#b4b4b4', '#3e3e3e', '#292929', '#1f1f1f', '#393939', '#1b1b1b', '#a1a1a1', '#525252', '#fcfcfc', '#262626', '#2a2a2a', '#383838', '#525252', '20px', '10px'],
+          darkest: ['#323232', '#b4b4b4', '#3e3e3e', '#3e3e3e', '#525252', '#292929', '#1f1f1f', '#393939', '#1b1b1b', '#a1a1a1', '#525252', '#fcfcfc', '#262626', '#2a2a2a', '#383838', '#525252', '20px', '10px',],
         },
       }
     }
@@ -946,6 +1170,7 @@ var app = new Vue({
         { id: "refresh", label: "Refresh panel", enabled: true, checkable: false, checked: false, },
         { id: "test", label: "Run test", enabled: true, checkable: false, checked: false, },
         { label: "---" },
+        { id: "localhost", label: "Launch DevTools", enabled: true, checkable: false, checked: false, },
         { id: "about", label: "Go to Homepage", enabled: true, checkable: false, checked: false, },
       ],
     },
@@ -1008,13 +1233,25 @@ var app = new Vue({
         this.buildNumber = 'unknown';
       }
       const debug = window.cep.fs.readFile(`${path}/.debug`);
-      const debugID = new RegExp('\\<host\\sname\\=\\"' + this.activeApp + '\\"\\sport\\=\\"(\\d*)', 'i');
-      // console.log(debugID)
+      const debugID = new RegExp(`\\<Host\\sName\\=\\"${this.activeApp}\\"\\sPort\\=\\"(\\d*)`);
       let hit = debug.data.match(debugID);
       this.localhost = hit[1];
+      // console.log(this.localhost);
       Event.$emit('buildNumber', this.buildNumber);
       Event.$emit('portNumber', this.localhost);
+      this.getDebug();
     },
+    getDebug() {
+      const debug = window.cep.fs.readFile(`${csInterface.getSystemPath(SystemPath.EXTENSION)}/.debug`);
+      const port = new RegExp(`\\<Host\\sName\\=\\"${this.activeApp}\\"\\sPort\\=\\"(\\d*)`);
+      let hit = debug.data.match(port);
+      this.localhost = `https://localhost:${hit[1]}`;
+      console.log(this.localhost);
+      // CSInterface.openURLInDefaultBrowser(this.homepage);
+      cep.util.openURLInDefaultBrowser(this.localhost);
+      // cep.util.openURLInDefaultBrowser('https://www.google.com')
+    },
+
     // tryFetch() {
     //   fetch('http://inventsable.cc/master.json')
     //     .then(function (response) {
@@ -1064,10 +1301,7 @@ var app = new Vue({
       } else {
         console.log('Detected previous session data');
         this.context.menu = JSON.parse(storage.getItem('contextmenu'));
-        // this.notificationsEnabled = JSON.parse(storage.getItem('notificationsEnabled'));
         this.rememberContextMenu(storage);
-        // console.log(storage);
-        // console.log(this.notificationsEnabled);
       }
       Event.$emit('rebuildEvents');
     },
@@ -1108,6 +1342,9 @@ var app = new Vue({
         location.reload();
       } else if (id == 'about') {
         cep.util.openURLInDefaultBrowser(this.homepage);
+      // } else if (id == 'localhost') {
+        // alert(`localhost:${this.localhost}`)
+        // cep.util.openURLInDefaultBrowser('localhost');
       } else if (id == 'test') {
         loadJSX(csInterface.hostEnvironment.appName + '/host.jsx');
       } else {

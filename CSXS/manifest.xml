@@ -37,19 +37,19 @@
         </Lifecycle>
         <UI>
           <Type>Panel</Type>
-          <Menu>protoLayers</Menu>
+          <Menu>Layers+</Menu>
           <Geometry>
             <Size>
               <Height>200</Height>
-              <Width>200</Width>
+              <Width>382</Width>
             </Size>
             <MaxSize>
-              <Height>400</Height>
-              <Width>600</Width>
+              <Height>1000</Height>
+              <Width>1000</Width>
             </MaxSize>
             <MinSize>
               <Height>100</Height>
-              <Width>70</Width>
+              <Width>382</Width>
             </MinSize>
           </Geometry>
           <Icons>

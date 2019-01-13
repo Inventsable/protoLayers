@@ -2,7 +2,7 @@
 
 Revamp of [mightyLayers](https://github.com/Inventsable/mightyLayers) while absorbing [Scribe](https://github.com/Inventsable/scribe) functions, this will be a replica of the native Layers panel with added functionality like keyboard navigation.
 
-![](https://i.imgur.com/WdkIopf.png)
+![](https://thumbs.gfycat.com/MagnificentConventionalGreathornedowl-size_restricted.gif)
 
 ## To-do:
 
