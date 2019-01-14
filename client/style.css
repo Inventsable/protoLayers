@@ -7,7 +7,7 @@
     --tail-offset: 3.25rem;
     --tail-pos: calc(100% - var(--tail-offset));
     --color-selected-layer: #374e63;
-    --layer-height: 1.5rem;
+    --layer-height: 1.41rem;
     --icon-height: 1rem;
     --border-width: 1.35px;
     --color-border-fade: #3b3b3b;
@@ -59,6 +59,9 @@
 }
 
 ::placeholder, input {
+    color: var(--color-placeholder);
+}
+.input-idle {
     color: var(--color-placeholder);
 }
 
@@ -201,11 +204,38 @@ span {
     margin: 0px .0625rem;
 }
 
+.active-layer-icon > svg {
+    width: 100%;
+}
+
+.active-layer-icon {
+    width: var(--layer-height);
+    min-width: var(--layer-height);
+    height: var(--layer-height);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    top: 0px;
+    right: 0px;
+    /* padding: .05rem;
+    border-style: solid;
+    border-color: var(--color-border);
+    margin: 0px .0625rem; */
+}
+
 .layer-label {
     width: .3rem;
     min-width: .3rem;
     border: 1.35px solid var(--color-border);
     height: var(--layer-height)
+}
+
+.layer-selectlabel {
+    border-style: solid;
+    border-color: rgba(0,0,0,0.85);
+    border-width: 1.35px;
+    border-radius: 1px;
 }
 
 .layer-preview {

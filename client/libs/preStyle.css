@@ -183,6 +183,7 @@ textarea {
 }
 
 .screen {
+  z-index: 2;
   margin-top: .5rem;
   box-sizing: border-box;
   /* border: 2px solid white; */
@@ -194,6 +195,19 @@ textarea {
   justify-content: flex-start;
   overflow-x: hidden;
   overflow-y: auto;
+}
+.screen-mask {
+  z-index: 1;
+  margin-top: .5rem;
+  box-sizing: border-box;
+  position: relative;
+  height: calc(100vh - var(--toolbar-height));
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background-color: var(--color-bg);
 }
 
 .testGrid {

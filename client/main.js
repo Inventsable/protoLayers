@@ -29,6 +29,81 @@ for (let e = 0; e < EventList.length; e++) {
   });
 }
 
+Vue.component('timers', {
+  template: `
+    <div class="scanner"></div>
+  `,
+  data() {
+    return {
+      last: {
+        selection: [],
+        activeLayer: -1,
+      },
+      timers: [
+        {
+          name: 'selection',
+          timer: null,
+          interval: 200,
+          // callforward: function() {
+          //   csInterface.evalScript('scanSelection', this.getMsg)
+          // },
+          // getMsg: function(msg) {
+          //   console.log(msg);
+          // }
+        },
+        {
+          name: 'activeLayer',
+          timer: null,
+          interval: 200,
+        },
+
+      ],
+      callList: ['selectionCheck']
+    }
+  },
+  mounted() {
+    const self = this;
+    this.startTimer(this.timers[0]);
+    this.startTimer(this.timers[1]);
+  },
+  methods: {
+    selectionCheck() { csInterface.evalScript('scanSelection()', this.selectionRead); },
+    selectionRead(msg) {
+      if (this.last.selection !== msg) {
+        this.last.selection = msg;
+        Event.$emit('fullSelectionChange');
+      }
+    },
+    activeLayerCheck() { csInterface.evalScript('scanActiveLayer()', this.activeLayerRead); },
+    activeLayerRead(msg) {
+      if (this.last.activeLayer !== msg) {
+        this.last.activeLayer = msg;
+        Event.$emit('fullActiveLayerChange');
+      }
+    },
+    findTimer(target) {
+      for (let i = 0; i < this.timers.length; i++) {
+        const timer = this.timers[i];
+        if (timer.name == target)
+          return timer;
+      }
+    },
+    startTimer(target) {
+      const self = this;
+      if (/selection/.test(target.name)) {
+        target.timer = setInterval(self.selectionCheck, target.interval);
+      } else if (/activeLayer/.test(target.name)) {
+        target.timer = setInterval(self.activeLayerCheck, target.interval);
+      }
+      target.isScanning = true;
+    },
+    stopTimer(target) {
+      clearInterval(target.timer);
+      target.isScanning = false;
+    }
+  }
+})
+
 Vue.component('protolayers', {
   template: `
     <extension 
@@ -37,6 +112,7 @@ Vue.component('protolayers', {
       :style="styleDebug()">
       <event-manager />
       <stylizer />
+      <timers />
       <bottom>
         <foot :model="info" />
       </bottom>
@@ -44,6 +120,7 @@ Vue.component('protolayers', {
         <center>
           <layers-list :model="layerlist"/>
         </center>
+        <panel-mask />
       </panel>
     </extension>
   `,
@@ -54,87 +131,223 @@ Vue.component('protolayers', {
         layercount: 0,
       },
       layerlist: [],
+      pageItems: [],
     }
   },
   computed: {
     debugMode: function () { return this.$root.debugMode },
     isWake: function () { return this.$root.isWake },
   },
+  mounted() {
+    this.$root.screen = this.$el.children[3];
+    this.$root.screenInner = this.$el.children[3].children[0];
+    Event.$on(`buildNumber`, this.setBuild);
+    Event.$on(`portNumber`, this.setPort);
+    csInterface.evalScript(`getLayerCount()`, this.setLayercount);
+    csInterface.evalScript(`getTotalLayerList()`, this.getLayerList);
+    Event.$on('selectionChange', this.changeSelection);
+    Event.$on('addToSelection', this.addToSelection);
+    Event.$on(`layerCount`, this.setLayercount);
+    Event.$on('fullSelectionChange', this.getActiveStatus);
+    Event.$on('fullActiveLayerChange', this.getActiveLayer);
+    Event.$on('checkActiveLayer', this.setActiveLayer);
+    Event.$on('findParentActiveLayer', this.findParentActiveLayer);
+    Event.$on('renameInput', this.renameInput);
+
+    this.getPageItems();
+  },
   methods: {
-    styleDebug() { return ((this.debugMode) && (this.isWake)) ? `border-color: ${this.$root.getCSS('color-selection')}` : `border-color: transparent`; },
-    wakeApp() {
-      this.$root.wake();
-      this.$root.dispatchEvent('debug.target', this.$root.name);
-      if (this.debugMode) {
-        this.$root.dispatchEvent('debug.link', 'Can start to read')
+    renameInput(msg) {
+      msg = JSON.parse(msg);
+      let target = this.targetPIN(this.layerlist, msg.pin);
+      target = this.$root.inputTarget;
+      // console.log(target)
+      target.name = msg.name;
+      let details = this.findJSXPosition(this.layerlist, msg.pin, -1, -1);
+      details = this.$root.inputPosition;
+      this.getPageItems();
+      if (details[1] < 0) {
+        this.renameLayer(details[0], msg.name);
       } else {
-        // Not in debug mode
+        let index = this.findPageItemMasterIndex(msg.pin);
+        this.renamePageItem(index, msg.name);
       }
-      Event.$emit('startStats');
+      // console.log(details);
     },
-    sleepApp() {
-      if (this.wakeOnly) {
-        this.wakeApp();
-        Event.$emit('clearStats');
-      } else {
-        this.$root.sleep();
-        if (this.debugMode) {
-          this.$root.dispatchEvent('debug.target', '');
-          this.$root.dispatchEvent('debug.unlink', 'Can no longer read')
-        } else {
-          // Not in debug mode
+    findPageItemMasterIndex(pin) {
+      for (let i = 0; i < this.pageItems.length; i++) {
+        const pageItem = this.pageItems[i];
+        if (pageItem.pin == pin) {
+          return i;
         }
-        Event.$emit('clearStats');
       }
     },
-    setBuild(msg) { this.info.buildNumber = msg; },
-    setPort(msg) { this.info.localhost = msg; },
+    getPageItems() {
+      this.pageItems = [];
+      for (let i = 0; i < this.layerlist.length; i++) {
+        const layer = this.layerlist[i];
+        this.searchForPageItems(layer.children);
+      }
+    },
+    searchForPageItems(list) {
+      // let mirror = [];
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        if (!/group|layer/i.test(item.type)) {
+          this.pageItems.push(item);
+        } else {
+          if (item.children.length) {
+            this.searchForPageItems(item.children);
+          }
+        }
+      }
+    },
+    renamePageItem(index, name) {
+      csInterface.evalScript(`renamePageItem(${index}, '${name}')`)
+    },
+    renameLayer(index, name) {
+      csInterface.evalScript(`renameLayer(${index}, '${name}')`)
+    },
+    findJSXPosition(list, pin, layerindex, itemindex) {
+      for (let i = 0; i < list.length; i++) {
+        const major = list[i];
+        if (/layer/i.test(major.type))
+          layerindex = i;
+        else
+          itemindex = i;
+        if (major.pin == pin) {
+          this.$root.inputPosition = [layerindex, itemindex];
+          return [layerindex, itemindex];
+        } else {
+          if (/group|layer/i.test(major.type)) {
+            // console.log('is group or layer')
+            if (major.children.length) {
+              // console.log('has children')
+              this.findJSXPosition(major.children, pin, layerindex, itemindex);
+            }
+          }
+        }
+        // if (layer.pin == pin)
+          // return ;
+      }
+    },
+    findParentActiveLayer(msg) {
+      msg = JSON.parse(msg);
+      let parent = this.findPINParent(this.layerlist, 'root', msg.pin, 'ab');
+      parent = this.findPIN(this.layerlist, this.$root.abParent);
+      parent.activeLayer = true;
+    },
+    findActiveLayer() {
+      for (let i = 0; i < this.layerlist.length; i++) {
+        const layer = this.layerlist[i];
+        if (layer.activeLayer) {
+          return i;
+        }
+      }
+    },
+    setActiveLayer() {
+      let index = this.findActiveLayer();
+      // console.log(`New active layer is ${index}`);
+      csInterface.evalScript(`setActiveLayer(${index})`);
+    },
+    getActiveLayer() {
+      Event.$emit('clearAllActiveLayers');
+      csInterface.evalScript(`scanActiveLayer()`, this.getNewActiveLayer);
+      this.getPageItems();
+    },
+    getNewActiveLayer(msg) {
+      if (msg >= 0)
+        this.layerlist[msg].activeLayer = true;
+    },
+    getActiveStatus() {
+      csInterface.evalScript(`getTotalLayerList()`, this.getNewLayerList);
+    },
     setLayercount(msg) { this.info.layercount = msg; },
+    smartReplaceValues(parent, layer, index, keywords) {
+      // isn't recursive-tested and has issues with assigning new pins
+      // @@ Events with pin numbers can't be set on mounted() and must be recalled every change
+      if (keywords.length)
+        keywords = keywords.join('\|')
+      let reg = new RegExp(keywords);
+      for (let [key, value] of Object.entries(layer)) {
+        if (!reg.test(key)) {
+          parent[index][key] = value;
+        } else if (/children/.test(key)) {
+          for (let i = 0; i < value.length; i++) {
+            const child = value[i];
+            this.smartReplaceValues(parent.children[i], child, i, keywords);
+          }
+        }
+      }
+    },
+    getNewLayerList(msg) {
+      let index = -1;
+      let keywords = ['open', 'pin', 'status'];
+      if (msg.length) {
+        msg = JSON.parse(msg);
+        for (let [root,layer] of Object.entries(msg)) {
+          index++;
+          this.smartReplaceValues(this.layerlist, layer, index, keywords);
+        }
+      }
+    },
     getLayerList(msg) {
       msg = JSON.parse(msg);
       this.layerlist = msg;
       console.log(this.layerlist);
+      this.getPageItems();
     },
-    findPINParent(list, pin) {
-      let mask = list;
+    findPINParent(list, parent, pin, which) {
       const self = this;
       for (let i = 0; i < list.length; i++) {
         const target = list[i];
         // console.log(`${target.pin} :: ${pin}`)
         if (target.pin == pin) {
-          console.log(`${target.pin} from ${target.depth} at ${target.index}`);
-          return mask;
+          // console.log(`${target.pin} from ${target.depth} at ${target.index}`);
+          if (typeof parent !== 'String') {
+            this.$root[`${which}Parent`] = parent.pin;
+            // console.log(`Match is ${parent.pin}`)
+            return parent.pin;
+          } else {
+            return parent;
+          }
         } else {
           if (target.children.length) {
             for (let c = 0; c < target.children.length; c++)
-              self.findPINParent(target.children, pin);
+              self.findPINParent(target.children, target, pin, which);
           }
         }
       }
+      // return parent.pin;
     },
     selectRangeOfChildren(list, min, max) {
       for (let i = min; i <= max; i++)
         list[i].selected = true;
     },
     selectFromPIN(a, b) {
-      console.log(this.layerlist);
+      let sameParent = false;
       let aParent = this.layerlist, bParent = this.layerlist;
       if (a.depth > 0) {
-        // console.log('Find aParent')
-        aParent = this.findPINParent(this.layerlist, a.pin);
+        aParent = this.findPINParent(this.layerlist, 'root', a.pin, 'a')
+        aParent = this.findPIN(this.layerlist, this.$root.aParent);
+        aParent = aParent.children;
       }
-      if (b.depth > 0)
-        bParent = this.findPINParent(this.layerlist, b.pin);
+      if (b.depth > 0) {
+        bParent = this.findPINParent(this.layerlist, 'root', b.pin, 'b');
+        bParent = this.findPIN(this.layerlist, this.$root.bParent);
+        bParent = bParent.children;
+      }
+      if (aParent === bParent)
+        sameParent = true;
       if ((a.depth == 0) || (b.depth == 0)) {
-        console.log('This is at root level')
+        // console.log('This is at root level')
       }
-      console.log('aParent is:')
-      console.log(aParent);
-      if (a.index > b.index) {
-        console.log('Crawl down')
-        // this.selectRangeOfChildren()
-      } else {
-        console.log('Crawl up');
+      if (sameParent) {
+        if (a.index > b.index) {
+          this.selectRangeOfChildren(aParent, b.index, a.index);
+        } else {
+          this.selectRangeOfChildren(aParent, a.index, b.index);
+        }
       }
     },
     findPIN(group, pin) {
@@ -147,6 +360,21 @@ Vue.component('protolayers', {
           if (layer.children.length) {
             for (let c = 0; c < layer.children.length; c++)
               self.findPIN(layer.children, pin);
+          }
+        }
+      }
+    },
+    targetPIN(group, pin) {
+      const self = this;
+      for (let i = 0; i < group.length; i++) {
+        const layer = group[i];
+        if (layer.pin == pin) {
+          this.$root.inputTarget = layer;
+          return layer;
+        } else {
+          if (layer.children.length) {
+            for (let c = 0; c < layer.children.length; c++)
+              self.targetPIN(layer.children, pin);
           }
         }
       }
@@ -192,20 +420,49 @@ Vue.component('protolayers', {
           }
         }
       }
-    }
+    },
+    styleDebug() { return ((this.debugMode) && (this.isWake)) ? `border-color: ${this.$root.getCSS('color-selection')}` : `border-color: transparent`; },
+    wakeApp() {
+      this.$root.wake();
+      this.$root.dispatchEvent('debug.target', this.$root.name);
+      if (this.debugMode) {
+        this.$root.dispatchEvent('debug.link', 'Can start to read')
+      } else {
+        // Not in debug mode
+      }
+      Event.$emit('startStats');
+    },
+    sleepApp() {
+      if (this.wakeOnly) {
+        this.wakeApp();
+        Event.$emit('clearStats');
+      } else {
+        this.$root.sleep();
+        if (this.debugMode) {
+          this.$root.dispatchEvent('debug.target', '');
+          this.$root.dispatchEvent('debug.unlink', 'Can no longer read')
+        } else {
+          // Not in debug mode
+        }
+        Event.$emit('clearStats');
+      }
+    },
+    setBuild(msg) { this.info.buildNumber = msg; },
+    setPort(msg) { this.info.localhost = msg; },
   },
-  mounted() {
-    this.$root.screen = this.$el.children[3];
-    this.$root.screenInner = this.$el.children[3].children[0];
-    Event.$on(`buildNumber`, this.setBuild);
-    Event.$on(`portNumber`, this.setPort);
-    csInterface.evalScript(`getLayerCount()`, this.setLayercount);
-    csInterface.evalScript(`getTotalLayerList()`, this.getLayerList);
-    Event.$on('selectionChange', this.changeSelection);
-    Event.$on('addToSelection', this.addToSelection);
-    Event.$on(`layerCount`, this.setLayercount);
+})
+
+Vue.component('panel-mask', {
+  template: `
+    <div class="screen-mask" @click="clickOutOfBounds()"></div>
+  `,
+  methods: {
+    clickOutOfBounds() {
+      Event.$emit('clearAllSelected');
+    }
   }
 })
+
 Vue.component('extension', { template: `<div class="appGrid"><slot></slot></div>` })
 Vue.component('panel', { template: `<div class="screen"><slot></slot></div>` })
 Vue.component('top', { template: `<div class="appTop"><slot></slot></div>` })
@@ -418,8 +675,8 @@ Vue.component('layer', {
     <div class="layer-subwrap">
       <div class="layer-wrap" :style="getLayerStyle()">
         <div class="layer-head">
-          <layer-icon type="visible" />
-          <layer-icon type="(model.locked) ? 'lock' : 'blank'" />
+          <layer-icon :type="(model.hidden) ? 'hidden' : 'visible'" />
+          <layer-icon :type="(model.locked) ? 'lock' : 'blank'" />
           <layer-label :color="model.label" :select="false" />
           <layer-tab v-for="(tab,key) in depth" :key="key" />
           <div class="layer-icon" @click="toggleOpenStatus">
@@ -437,7 +694,8 @@ Vue.component('layer', {
         </div>
         <div class="layer-tail" :style="getTailStyle()">
           <layer-icon :type="(model.active) ? 'radio-on' : 'radio-off'" />
-          <layer-label :color="model.label" :select="true" />
+          <layer-selectbox :color="model.label" :status="getStatus()" />
+          <layer-active-icon :truth="model.activeLayer" />
         </div>
       </div>
       <layer-drop v-if="hasChildren" :model="model" :parentindex="index" />
@@ -468,6 +726,7 @@ Vue.component('layer', {
   },
   mounted() {
     this.buildDepth();
+    // console.log(`Building setEditOnInput${this.model.pin}`)
     Event.$on(`setEditOnInput${this.model.pin}`, this.editModeOnSingle);
     Event.$on(`setEditOffInput${this.model.pin}`, this.editModeOffSingle);
     Event.$on('setEditOn', this.editModeOn);
@@ -475,13 +734,44 @@ Vue.component('layer', {
     Event.$on('overflowingTrue', this.overflowingTrue);
     Event.$on('overflowingFalse', this.overflowingFalse);
     Event.$on('clearAllSelected', this.clearAllSelected);
+    Event.$on('clearAllActiveLayers', this.clearAllActiveLayers);
   },
   methods: {
+    clearAllActiveLayers() {
+      if (/layer/i.test(this.model.type))
+      this.model.activeLayer = false;
+    },
+    getStatus() {
+      let err = 0;
+      if (this.hasChildren) {
+        for (let i = 0; i < this.model.children.length; i++) {
+          const child = this.model.children[i];
+          if (child.active)
+            err++;
+        }
+        if ((err > 0) && (this.model.active))
+          return 'major';
+        else if (err == this.model.children.length + 1)
+          return 'major';
+        else if (err > 0)
+          return 'minor';
+        else
+          return 'none';
+      } else {
+        if (this.model.active)
+          return 'major';
+        else
+          return 'none';
+      }
+      
+    },
     editModeOnSingle() {
       this.editMode = true;
+      console.log('Edit received')
       Event.$emit(`setFocusInput${this.model.pin}`);
     },
     editModeOffSingle() {
+      console.log('Edit requested off')
       this.editMode = false;
       Event.$emit(`resetLayerName${this.model.pin}`)
     },  
@@ -499,15 +789,25 @@ Vue.component('layer', {
       }
       if (!this.$root.Shift) {
         Event.$emit('clearAllSelected')
+        Event.$emit('clearAllActiveLayers')
         if (!this.model.selected) {
+          if (/layer/i.test(this.model.type)) {
+            this.model.activeLayer = true;
+          } else {
+            Event.$emit('findParentActiveLayer', JSON.stringify(child))
+          }
           this.model.selected = true;
           this.$root.master.selection = [child]
         }
       } else {
-        console.log('Shift is being held')
-        Event.$emit('addToSelection', JSON.stringify(child))
-        // console.log(this.model);
-      }      
+        Event.$emit('addToSelection', JSON.stringify(child));
+        if (/layer/i.test(this.model.type)) {
+          Event.$emit('clearAllActiveLayers');
+          this.model.activeLayer = true;
+        }
+        // Event.$emit('findParentActiveLayer', JSON.stringify(child))
+      }
+      Event.$emit('checkActiveLayer');
     },
     toggleOpenStatus() { this.model.open = !this.model.open; },
     getLayerStatusType() { return (/layer|group/i.test(this.model.type)) ? true : false; },
@@ -579,6 +879,7 @@ Vue.component('layer-name', {
     toggleEdit() {
       this.isEdit = !this.isEdit;
       if (this.isEdit) {
+        console.log(`sending setEditOnInput${this.model.pin}`)
         // Event.$emit(`setFocusInput${this.model.pin}`)
         Event.$emit(`setEditOnInput${this.model.pin}`);
       } else {
@@ -602,6 +903,28 @@ Vue.component('layer-label', {
       let style = `background-color:${this.color};`;
       if (this.select)
         style += 'width:6px;height:6px;border-color: black;'
+      return style;
+    }
+  }
+})
+
+Vue.component('layer-selectbox', {
+  props: {
+    color: String,
+    status: String,
+  },
+  template: `
+    <div :style="getLabelColor()" class="layer-selectlabel"></div>
+  `,
+  methods: {
+    getLabelColor() {
+      let style = `background-color:${this.color};`;
+      if (/major/.test(this.status))
+        style += 'width:7px;height:6px;'
+      else if (/minor/.test(this.status))
+        style += 'width:5px;height:4px;'
+      else
+        style = `width: 0px;height:0px;border-width:0px;`
       return style;
     }
   }
@@ -672,6 +995,34 @@ Vue.component('toolbar-icon', {
 
 })
 
+Vue.component('layer-active-icon', {
+  props: {
+    truth: Boolean,
+  },
+  template: `
+    <div class="active-layer-icon" v-show="truth">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+        <polyline :class="getSVGClass()" :style="getSVGStyle()" points="10 0 20 0 20 10"/>
+      </svg>
+    </div>
+  `,
+  computed: {
+    iconColor: function () { return `fill: ${this.$root.getCSS('color-icon')}` }
+  },
+  methods: {
+    doAction() {
+      // console.log(`Clicked on ${this.type}`)
+    },
+    getSVGStyle() {
+      let style = `${this.iconColor};`;
+      return style;
+    },
+    getSVGClass() {
+      return `layer-icon-contents`
+    },
+  }
+})
+
 Vue.component('layer-icon', {
   props: {
     type: String,
@@ -683,11 +1034,13 @@ Vue.component('layer-icon', {
       v-if="type !== 'none'">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
         <path v-if="type == 'visible'" :class="getSVGClass()" :style="getSVGStyle()" d="M16.75,8.18a8.82,8.82,0,0,0-13.5,0l-1,1.23a.93.93,0,0,0,0,1.18l1,1.23a8.82,8.82,0,0,0,13.5,0l1-1.23a.93.93,0,0,0,0-1.18ZM10,13.23A3.23,3.23,0,1,1,13.23,10,3.22,3.22,0,0,1,10,13.23Zm1.58-3.47a1.94,1.94,0,0,1,0,.24A1.6,1.6,0,1,1,10,8.4l.24,0A1.61,1.61,0,0,0,11.58,9.76Z"/>
+        <path v-if="type == 'hidden'" :class="getSVGClass()" :style="getSVGStyle()"/>
         <path v-if="type == 'lock'" :class="getSVGClass()" :style="getSVGStyle()" d="M11.07,14v0a.25.25,0,0,0,.09-.09Zm4.85-5.53h-.65V7A5.27,5.27,0,0,0,4.73,7V8.47H4.08a.9.9,0,0,0-.91.9V17.7a.56.56,0,0,0,.57.56H16.27a.56.56,0,0,0,.56-.56V9.37A.9.9,0,0,0,15.92,8.47Zm-4.76,5.46a.25.25,0,0,1-.09.09v2.19H8.93V14s0,0,0-.06a1.76,1.76,0,0,1-.72-1.43,1.84,1.84,0,1,1,3.68,0A1.78,1.78,0,0,1,11.16,13.93Zm2-5.46H6.87V7a3.13,3.13,0,0,1,6.26,0Zm-2,5.46a.25.25,0,0,1-.09.09v0Z"/>
         <path v-if="type == 'arrow-right'" :class="getSVGClass()" :style="getSVGStyle()" d="M4.56,16.53a1,1,0,0,1-.64-.23,1,1,0,0,1-.13-1.41L8.11,9.72,3.83,5.15A1,1,0,0,1,5.29,3.78L9.72,8.51a1.77,1.77,0,0,1,.06,2.33L5.33,16.17A1,1,0,0,1,4.56,16.53Zm3.7-6.66h0Z"/>
         <path v-if="type == 'arrow-down'" :class="getSVGClass()" :style="getSVGStyle()" d="M3.47,9.07a1,1,0,0,1,.23-.64A1,1,0,0,1,5.11,8.3l5.17,4.32,4.57-4.28A1,1,0,0,1,16.22,9.8l-4.73,4.43a1.77,1.77,0,0,1-2.33.06L3.83,9.84A1,1,0,0,1,3.47,9.07Zm6.66,3.7h0Z"/>
         <path v-if="type == 'radio-on'" :class="getSVGClass()" :style="getSVGStyle()" d="M10,1.38A8.63,8.63,0,1,0,18.63,10,8.62,8.62,0,0,0,10,1.38Zm0,16A7.38,7.38,0,1,1,17.38,10,7.38,7.38,0,0,1,10,17.38ZM10,4.25A5.75,5.75,0,1,0,15.75,10,5.76,5.76,0,0,0,10,4.25Zm0,10A4.25,4.25,0,1,1,14.25,10,4.26,4.26,0,0,1,10,14.25Z"/>
         <path v-if="type == 'radio-off'" :class="getSVGClass()" :style="getSVGStyle()" d="M10,15.75A5.75,5.75,0,1,1,15.75,10,5.76,5.76,0,0,1,10,15.75Zm0-10A4.25,4.25,0,1,0,14.25,10,4.26,4.26,0,0,0,10,5.75Z"/>
+        <polyline v-if="type == 'activeLayer'" :class="getSVGClass()" :style="getSVGStyle()" points="10 0 20 0 20 10"/>
       </svg>
     </div>
   `,
@@ -713,7 +1066,7 @@ Vue.component('layer-icon', {
     },
     getWrapStyle() {
       let style = ``
-      if (this.type == 'visible')
+      if (/visible|hidden/.test(this.type))
         style += `border-width: 0px 1.35px 0px 0px;`
       else if (/arrow/.test(this.type))
         style += `border-width: 0px;margin:0px .25rem;`
@@ -739,8 +1092,9 @@ Vue.component('layer-input', {
         :class="getClass()"
         :style="checkStyle()"
         @keyup.enter="submitTest()"
+        @keyup="submitName()"
         v-model="msg" 
-        :placeholder="model.name""/>
+        :placeholder="model.name"/>
     </div>
   `,
   data() {
@@ -766,6 +1120,15 @@ Vue.component('layer-input', {
     Event.$on(`clearFocusInput${this.model.pin}`, this.clearFocus)
   },
   methods: {
+    submitName() {
+      // console.log(`${this.model.pin} : ${this.msg}`);
+      const self = this;
+      let message = {
+        name: self.msg,
+        pin: self.model.pin
+      }
+      Event.$emit('renameInput', JSON.stringify(message));
+    },
     setGlobalOff() {
       this.globalEditMode = false;
     },
@@ -776,6 +1139,12 @@ Vue.component('layer-input', {
       Event.$emit(`selectionChange`, JSON.stringify(this.model));
     },
     eraseEdit() {
+      if (this.msg.length) {
+        // console.log('clearing input')
+        this.msg = ''
+      } else {
+        this.model.name = this.model.placeholder;
+      }
       if (!this.globalEditMode) {
         console.log(`Sending request off for ${this.model.pin}`)
         Event.$emit(`setEditOffInput${this.model.pin}`);
@@ -949,6 +1318,7 @@ Vue.component('event-manager', {
     this.handleResize(null);
     window.addEventListener('resize', this.handleResize);
     csInterface.addEventListener(CSInterface.THEME_COLOR_CHANGED_EVENT, self.appThemeChanged);
+    csInterface.addEventListener('documentAfterActivate', this.reset);
     this.appThemeChanged();
     Event.$on('newAction', this.checkDebugAction);
     Event.$on('keypress', this.checkDebugKeypress);
@@ -962,6 +1332,7 @@ Vue.component('event-manager', {
     hasAlt: function () { return this.$root.Alt ? 'Alt' : false; },
   },
   methods: {
+    reset() { location.reload(); },
     checkDebugAction(msg) {
       if (this.$root.debugMode) {
         console.log(`Debug action is ${msg}`)
@@ -1231,6 +1602,11 @@ var app = new Vue({
     Shift: false,
     Ctrl: false,
     Alt: false,
+    aParent: '',
+    bParent: '',
+    abParent: '',
+    inputPosition: [],
+    inputTarget: '',
     master: {
       selection: []
     },
