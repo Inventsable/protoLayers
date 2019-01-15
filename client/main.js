@@ -69,6 +69,7 @@ Vue.component('protolayers', {
       pageItems: [],
       target: {},
       parent: {},
+      navigator: {},
     }
   },
   computed: {
@@ -81,7 +82,8 @@ Vue.component('protolayers', {
     },
     autoTarget: function () {
       return this.getTarget();
-    }
+    },
+    
   },
   mounted() {
     this.$root.screen = this.$el.children[3];
@@ -101,9 +103,14 @@ Vue.component('protolayers', {
 
     Event.$on('globalEditBounce', this.setEditFocusOnElt);
     Event.$on('navigateSelection', this.navigateSelection);
+    Event.$on('recheckSelection', this.recheckSelection);
     this.getPageItems();
   },
   methods: {
+    recheckSelection() {
+      console.log('Rechecking selection');
+      console.log(this.selection[0].index)
+    },
     setEditFocusOnElt() {
       console.log('Found')
       if (this.hasSelection) {
@@ -120,8 +127,8 @@ Vue.component('protolayers', {
         index: target.index,
       }
       this.$root.master.selection = [child];
-      Event.$emit(`setFocusOnRow${target.pin}`);
-      console.log(`${this.selection[0].depth} :: ${this.selection[0].index} :: ${this.selection[0].pin}`);
+      // Event.$emit(`setFocusOnRow${target.pin}`);
+      // console.log(`${this.selection[0].depth} :: ${this.selection[0].index} :: ${this.selection[0].pin}`);
     },
     getTarget() {
       if (this.hasSelection) {
@@ -137,14 +144,18 @@ Vue.component('protolayers', {
         sParent = this.findPINParent(this.layerlist, 'root', this.selection[0].pin, 's')
         sParent = this.findPIN(this.layerlist, this.$root.sParent);
         console.log(`Parent is`)
+        sParent = sParent.children;
         console.log(sParent);
-        return sParent;
+        console.log('Child is')
+        // this.target = sParent.children[]
+        return sParent.children;
       } else {
         return this.layerlist;
       }
     },
     navigateSelection(dir) {
       console.log(`Navigating ${dir}`);
+      console.log(this.selection[0].index)
       let pathfinder = this.findPIN(this.layerlist, this.selection[0].pin);
       this.target = this.findPIN(this.layerlist, this.selection[0].pin);
       // if (this.hasSelection) {
@@ -174,30 +185,39 @@ Vue.component('protolayers', {
       // let index = target.index;
       // let target = this.getTarget();
       let list = this.getParent();
-      target = this.autoTarget;
+      target = this.target;
       console.log(target)
-      if (num > 0) {
-        if (target.index + num < list.length) {
-          if ((this.autoTarget.open) && (this.autoTarget.children.length)) {
-            target = target.children[0];
+      try {
+        if (num > 0) {
+          if (target.index + num < list.length) {
+            if ((this.autoTarget.open) && (this.autoTarget.children.length)) {
+              target = target.children[0];
+            } else {
+              target = list[target.index + num];
+            }
           } else {
-            target = list[target.index + num];
+            target = list[0];
           }
         } else {
-          target = list[0];
+          if (target.index + num >= 0) {
+            target = list[target.index + num];
+          } else {
+            target = list[list.length - 1];
+          }
         }
-      } else {
-        if (target.index + num >= 0) {
-          target = list[target.index + num];
-        } else {
-          target = list[list.length - 1];
-        }
+      } catch (err) {
+        // console.log(err)
+        console.log('Error for target, rechecking...')
+        console.log(this.selection[0].pin)
+        target = this.findPIN(list, this.selection[0].pin);
+        console.log(target)
+      } finally {
+        this.setSelection(target);
+        // console.log(this.autoParent.name);
+        console.log(list);
+        console.log(target.name);
+        console.log(target);
       }
-      this.setSelection(target);
-      // console.log(this.autoParent.name);
-      console.log(list);
-      console.log(target.name);
-      console.log(target);
     },
     navigateFold(direction) {
       if ((/left/i.test(direction)) && (/layer|group/i.test(this.target.type)) && (this.target.children.length)) {
@@ -473,6 +493,12 @@ Vue.component('protolayers', {
       msg = JSON.parse(msg);
       Event.$emit('clearAllSelected');
       let result = this.findInLayers(this.layerlist, 'start', msg, 'select');
+      const child = {
+        pin: result.pin,
+        depth: result.depth,
+        index: result.index,
+      }
+      this.$root.selection = [child];
       // console.log('Selection changed to...')
       // console.log(result);
     },
@@ -820,6 +846,18 @@ Vue.component('layers-list', {
 
 //     <layer-icon @click="toggleOpenStatus" @mouseover="checker" :type="getLayerStatusType()" />
 
+
+Vue.component('fake-focus', {
+  template: `
+    <input :style="getStyle()" class="fake-focus" />
+  `,
+  methods: {
+    getStyle() {
+      return '';
+    }
+  }
+})
+
 Vue.component('layer', {
   props: {
     model: Object,
@@ -846,6 +884,7 @@ Vue.component('layer', {
           <layer-preview />
           <layer-input v-show="editMode" :model="model" :index="index" />
           <layer-name v-show="!editMode" :model="model" :index="index" />
+          <fake-focus v-show="!editMode" />
           <div class="layer-blank" :style="getLayerStyle()"></div>
         </div>
         <div class="layer-tail" :style="getTailStyle()">
@@ -863,6 +902,7 @@ Vue.component('layer', {
       overflowing: false,
       editMode: false,
       elt: {},
+      fakeElt: {},
     }
   },
   computed: {
@@ -884,6 +924,8 @@ Vue.component('layer', {
   mounted() {
     this.buildDepth();
     this.elt = this.$el.children[0];
+    this.fakeElt = this.elt.children[1].children[3];
+    // console.log(this.fakeElt);
     // console.log(`Building setEditOnInput${this.model.pin}`)
     // console.log(this.elt);
     Event.$on('setEditOn', this.editModeOn);
@@ -898,11 +940,8 @@ Vue.component('layer', {
   },
   methods: {
     setFocus() {
-      console.log('Setting focus to:');
-      console.log(this.elt);
-      this.$nextTick(() => this.elt.focus({ preventScroll: false }));
-      document.activeElement = this.elt;
-      console.log(document.activeElement);
+      this.$nextTick(() => this.fakeElt.focus({ preventScroll: false }));
+      document.activeElement = this.fakeElt;
     },
     clearFocus() {
       this.$nextTick(() => this.elt.blur());
@@ -1344,7 +1383,8 @@ Vue.component('layer-input', {
     // setGlobalOff() { this.$root.globalEditMode = false; },
     // setGlobalOn() { this.$root.globalEditMode = true; },
     isFocused() {
-      console.log(this.model.pin)
+      console.log(this.model.pin);
+      Event.$emit('recheckSelection');
       Event.$emit(`selectionChange`, JSON.stringify(this.model));
     },
     eraseEdit() {
@@ -1361,6 +1401,16 @@ Vue.component('layer-input', {
     },
     setFocus() {
       // console.log('Setting focus to:');
+
+      // this.$root.master.selection
+      const child = {
+        pin: this.model.pin,
+        depth: this.model.depth,
+        index: this.model.index,
+      }
+      this.$root.master.selection = [child];
+      Event.$emit('recheckSelection');
+      Event.$emit(`selectionChange`, JSON.stringify(this.model));
       this.$nextTick(() => this.elt.focus());
     },
     clearFocus() {

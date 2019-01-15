@@ -62,7 +62,10 @@
     color: var(--color-placeholder);
 }
 .input-idle {
+    box-sizing: border-box;
     color: var(--color-placeholder);
+    height: var(--layer-height);
+    padding: 0px;
 }
 
 .layer-head {
@@ -80,6 +83,17 @@
     width: 98%;
 }
 
+.fake-focus {
+    width: 1px;
+    height: 1px;
+    background-color: var(--color-bg);
+    color: var(--color-bg);
+    user-select: none;
+    border: 0px solid var(--color-bg);
+    outline-width: 0px;
+    cursor: default;
+}
+
 span {
     white-space: pre;
     display: flex;
@@ -88,12 +102,17 @@ span {
 
 .layer-name {
     user-select: none;
+    box-sizing: border-box;
     cursor: default;
     margin-left: .5rem;
     color: var(--color-placeholder);
     font-size: .9rem;
     font-family: 'Roboto';
     padding: 1px 0px 0px 0px;
+    height: var(--layer-height);
+    /* display: flex; */
+    /* align-items: flex-end; */
+    /* margin-bottom: calc(var(--layer-height) / 4); */
 }
 
 .layer-blank {
