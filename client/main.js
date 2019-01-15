@@ -9,6 +9,16 @@ const EventList = [
   { listenTo: 'console', sendTo: 'internalConsole', package: false, },
 ];
 
+// let masterEdit = false;
+// document.body.addEventListener('keydown', function(evt) {
+//   if ((!masterEdit) && (/arrow/i.test(evt.key))) {
+//     console.log(evt);
+//     console.log(`${evt.key} was pressed outside Vue`)
+//     evt.preventDefault();
+//   }
+// })
+
+
 for (let e = 0; e < EventList.length; e++) {
   let event = EventList[e];
   csInterface.addEventListener(event.listenTo, function (evt) {
@@ -28,81 +38,6 @@ for (let e = 0; e < EventList.length; e++) {
     }
   });
 }
-
-Vue.component('timers', {
-  template: `
-    <div class="scanner"></div>
-  `,
-  data() {
-    return {
-      last: {
-        selection: [],
-        activeLayer: -1,
-      },
-      timers: [
-        {
-          name: 'selection',
-          timer: null,
-          interval: 200,
-          // callforward: function() {
-          //   csInterface.evalScript('scanSelection', this.getMsg)
-          // },
-          // getMsg: function(msg) {
-          //   console.log(msg);
-          // }
-        },
-        {
-          name: 'activeLayer',
-          timer: null,
-          interval: 200,
-        },
-
-      ],
-      callList: ['selectionCheck']
-    }
-  },
-  mounted() {
-    const self = this;
-    this.startTimer(this.timers[0]);
-    this.startTimer(this.timers[1]);
-  },
-  methods: {
-    selectionCheck() { csInterface.evalScript('scanSelection()', this.selectionRead); },
-    selectionRead(msg) {
-      if (this.last.selection !== msg) {
-        this.last.selection = msg;
-        Event.$emit('fullSelectionChange');
-      }
-    },
-    activeLayerCheck() { csInterface.evalScript('scanActiveLayer()', this.activeLayerRead); },
-    activeLayerRead(msg) {
-      if (this.last.activeLayer !== msg) {
-        this.last.activeLayer = msg;
-        Event.$emit('fullActiveLayerChange');
-      }
-    },
-    findTimer(target) {
-      for (let i = 0; i < this.timers.length; i++) {
-        const timer = this.timers[i];
-        if (timer.name == target)
-          return timer;
-      }
-    },
-    startTimer(target) {
-      const self = this;
-      if (/selection/.test(target.name)) {
-        target.timer = setInterval(self.selectionCheck, target.interval);
-      } else if (/activeLayer/.test(target.name)) {
-        target.timer = setInterval(self.activeLayerCheck, target.interval);
-      }
-      target.isScanning = true;
-    },
-    stopTimer(target) {
-      clearInterval(target.timer);
-      target.isScanning = false;
-    }
-  }
-})
 
 Vue.component('protolayers', {
   template: `
@@ -132,11 +67,21 @@ Vue.component('protolayers', {
       },
       layerlist: [],
       pageItems: [],
+      target: {},
+      parent: {},
     }
   },
   computed: {
     debugMode: function () { return this.$root.debugMode },
     isWake: function () { return this.$root.isWake },
+    selection: function () { return this.$root.master.selection },
+    hasSelection: function () { return (this.$root.master.selection.length) ? true : false },
+    autoParent: function () {
+      return this.getParent();
+    },
+    autoTarget: function () {
+      return this.getTarget();
+    }
   },
   mounted() {
     this.$root.screen = this.$el.children[3];
@@ -154,9 +99,130 @@ Vue.component('protolayers', {
     Event.$on('findParentActiveLayer', this.findParentActiveLayer);
     Event.$on('renameInput', this.renameInput);
 
+    Event.$on('globalEditBounce', this.setEditFocusOnElt);
+    Event.$on('navigateSelection', this.navigateSelection);
     this.getPageItems();
   },
   methods: {
+    setEditFocusOnElt() {
+      console.log('Found')
+      if (this.hasSelection) {
+        console.log(`Bounced for setFocusInput${this.selection[0].pin}`);
+        Event.$emit(`setFocusInput${this.selection[0].pin}`);
+      }
+    },
+    setSelection(target) {
+      Event.$emit('clearAllSelected');
+      target.selected = true;
+      const child = {
+        pin: target.pin,
+        depth: target.depth,
+        index: target.index,
+      }
+      this.$root.master.selection = [child];
+      Event.$emit(`setFocusOnRow${target.pin}`);
+      console.log(`${this.selection[0].depth} :: ${this.selection[0].index} :: ${this.selection[0].pin}`);
+    },
+    getTarget() {
+      if (this.hasSelection) {
+        return this.altFindPIN(this.layerlist, this.selection[0].pin);
+      } else {
+        return null;
+      }
+    },
+    getParent() {
+      let sParent = this.layerlist;
+      if (this.selection[0].depth > 0) {
+        let index = this.selection[0].index;
+        sParent = this.findPINParent(this.layerlist, 'root', this.selection[0].pin, 's')
+        sParent = this.findPIN(this.layerlist, this.$root.sParent);
+        console.log(`Parent is`)
+        console.log(sParent);
+        return sParent;
+      } else {
+        return this.layerlist;
+      }
+    },
+    navigateSelection(dir) {
+      console.log(`Navigating ${dir}`);
+      let pathfinder = this.findPIN(this.layerlist, this.selection[0].pin);
+      this.target = this.findPIN(this.layerlist, this.selection[0].pin);
+      // if (this.hasSelection) {
+      //   let sParent = this.layerlist, sPin;
+      //   if (this.selection[0].depth > 0) {
+      //     let index = this.selection[0].index;
+      //     sParent = this.findPINParent(this.layerlist, 'root', this.selection[0].pin, 's')
+      //     sParent = this.findPIN(this.layerlist, this.$root.sParent);
+      //     this.parent = sParent;
+      //     this.target = this.parent.children[index];
+      //   }
+      // }
+      if (/up|down/i.test(dir)) {
+        let offset;
+        if (/up/i.test(dir))
+          offset = -1;
+        else if (/down/i.test(dir))
+          offset = 1;
+        this.navigateParent(offset);
+      } else {
+        this.navigateFold(dir);
+      }
+      
+    },
+    navigateParent(num) {
+      // console.log(target);
+      // let index = target.index;
+      // let target = this.getTarget();
+      let list = this.getParent();
+      target = this.autoTarget;
+      console.log(target)
+      if (num > 0) {
+        if (target.index + num < list.length) {
+          if ((this.autoTarget.open) && (this.autoTarget.children.length)) {
+            target = target.children[0];
+          } else {
+            target = list[target.index + num];
+          }
+        } else {
+          target = list[0];
+        }
+      } else {
+        if (target.index + num >= 0) {
+          target = list[target.index + num];
+        } else {
+          target = list[list.length - 1];
+        }
+      }
+      this.setSelection(target);
+      // console.log(this.autoParent.name);
+      console.log(list);
+      console.log(target.name);
+      console.log(target);
+    },
+    navigateFold(direction) {
+      if ((/left/i.test(direction)) && (/layer|group/i.test(this.target.type)) && (this.target.children.length)) {
+        console.log('Closing')
+        this.target.open = false;
+      } else if ((/right/i.test(direction)) && (/layer|group/i.test(this.target.type)) && (this.target.children.length)) {
+        console.log('Opening')
+        this.target.open = true;
+      }
+    },
+    altFindPIN(list, pin) {
+      const self = this;
+      for (let i = 0; i < list.length; i++) {
+        const layer = list[i];
+        if (layer.pin == pin) {
+          this.$root.temp = layer;
+          return layer;
+        } else {
+          if (layer.children.length) {
+            for (let c = 0; c < layer.children.length; c++)
+              self.altFindPIN(layer.children, pin);
+          }
+        }
+      }
+    },
     renameInput(msg) {
       msg = JSON.parse(msg);
       let target = this.targetPIN(this.layerlist, msg.pin);
@@ -179,6 +245,14 @@ Vue.component('protolayers', {
         const pageItem = this.pageItems[i];
         if (pageItem.pin == pin) {
           return i;
+        }
+      }
+    },
+    findInPageItems(pin) {
+      for (let i = 0; i < this.pageItems.length; i++) {
+        const pageItem = this.pageItems[i];
+        if (pageItem.pin == pin) {
+          return pageItem;
         }
       }
     },
@@ -260,6 +334,8 @@ Vue.component('protolayers', {
         this.layerlist[msg].activeLayer = true;
     },
     getActiveStatus() {
+      Event.$emit('clearPreviousPINs');
+      console.log('Clearing previous pins')
       csInterface.evalScript(`getTotalLayerList()`, this.getNewLayerList);
     },
     setLayercount(msg) { this.info.layercount = msg; },
@@ -282,7 +358,7 @@ Vue.component('protolayers', {
     },
     getNewLayerList(msg) {
       let index = -1;
-      let keywords = ['open', 'pin', 'status'];
+      let keywords = ['open', 'status']; // @@ pin was here
       if (msg.length) {
         msg = JSON.parse(msg);
         for (let [root,layer] of Object.entries(msg)) {
@@ -290,6 +366,8 @@ Vue.component('protolayers', {
           this.smartReplaceValues(this.layerlist, layer, index, keywords);
         }
       }
+      console.log('Assigning new pins')
+      Event.$emit('assignNewPINs');
     },
     getLayerList(msg) {
       msg = JSON.parse(msg);
@@ -350,10 +428,10 @@ Vue.component('protolayers', {
         }
       }
     },
-    findPIN(group, pin) {
+    findPIN(list, pin, override=false) {
       const self = this;
-      for (let i = 0; i < group.length; i++) {
-        const layer = group[i];
+      for (let i = 0; i < list.length; i++) {
+        const layer = list[i];
         if (layer.pin == pin) {
           return layer;
         } else {
@@ -364,10 +442,10 @@ Vue.component('protolayers', {
         }
       }
     },
-    targetPIN(group, pin) {
+    targetPIN(list, pin) {
       const self = this;
-      for (let i = 0; i < group.length; i++) {
-        const layer = group[i];
+      for (let i = 0; i < list.length; i++) {
+        const layer = list[i];
         if (layer.pin == pin) {
           this.$root.inputTarget = layer;
           return layer;
@@ -395,6 +473,8 @@ Vue.component('protolayers', {
       msg = JSON.parse(msg);
       Event.$emit('clearAllSelected');
       let result = this.findInLayers(this.layerlist, 'start', msg, 'select');
+      // console.log('Selection changed to...')
+      // console.log(result);
     },
     findInLayers(group, heritage, obj, action) {
       // console.log(group)
@@ -459,6 +539,81 @@ Vue.component('panel-mask', {
   methods: {
     clickOutOfBounds() {
       Event.$emit('clearAllSelected');
+    }
+  }
+})
+
+Vue.component('timers', {
+  template: `
+    <div class="scanner"></div>
+  `,
+  data() {
+    return {
+      last: {
+        selection: [],
+        activeLayer: -1,
+      },
+      timers: [
+        {
+          name: 'selection',
+          timer: null,
+          interval: 200,
+          // callforward: function() {
+          //   csInterface.evalScript('scanSelection', this.getMsg)
+          // },
+          // getMsg: function(msg) {
+          //   console.log(msg);
+          // }
+        },
+        {
+          name: 'activeLayer',
+          timer: null,
+          interval: 200,
+        },
+
+      ],
+      callList: ['selectionCheck']
+    }
+  },
+  mounted() {
+    const self = this;
+    this.startTimer(this.timers[0]);
+    this.startTimer(this.timers[1]);
+  },
+  methods: {
+    selectionCheck() { csInterface.evalScript('scanSelection()', this.selectionRead); },
+    selectionRead(msg) {
+      if (this.last.selection !== msg) {
+        this.last.selection = msg;
+        Event.$emit('fullSelectionChange');
+      }
+    },
+    activeLayerCheck() { csInterface.evalScript('scanActiveLayer()', this.activeLayerRead); },
+    activeLayerRead(msg) {
+      if (this.last.activeLayer !== msg) {
+        this.last.activeLayer = msg;
+        Event.$emit('fullActiveLayerChange');
+      }
+    },
+    findTimer(target) {
+      for (let i = 0; i < this.timers.length; i++) {
+        const timer = this.timers[i];
+        if (timer.name == target)
+          return timer;
+      }
+    },
+    startTimer(target) {
+      const self = this;
+      if (/selection/.test(target.name)) {
+        target.timer = setInterval(self.selectionCheck, target.interval);
+      } else if (/activeLayer/.test(target.name)) {
+        target.timer = setInterval(self.activeLayerCheck, target.interval);
+      }
+      target.isScanning = true;
+    },
+    stopTimer(target) {
+      clearInterval(target.timer);
+      target.isScanning = false;
     }
   }
 })
@@ -575,19 +730,20 @@ Vue.component('toggle-edit', {
       {{label}}
     </div>
   `,
-  data() {
-    return {
-      editMode: false,
-    }
-  },
+  // data() {
+  //   return {
+  //     editMode: false,
+  //   }
+  // },
   computed: {
+    editMode: function() { return this.$root.globalEditMode },
     label: function() {
       return `Toggle to ${this.editMode ? 'Default' : 'Edit'}`
     }
   },
   methods: {
     toggle() {
-      this.editMode = !this.editMode;
+      this.$root.globalEditMode = !this.$root.globalEditMode;
       if (this.editMode) {
         Event.$emit('setEditOn');
         Event.$emit('globalEditOn');
@@ -706,6 +862,7 @@ Vue.component('layer', {
       depth: [],
       overflowing: false,
       editMode: false,
+      elt: {},
     }
   },
   computed: {
@@ -726,17 +883,44 @@ Vue.component('layer', {
   },
   mounted() {
     this.buildDepth();
+    this.elt = this.$el.children[0];
     // console.log(`Building setEditOnInput${this.model.pin}`)
-    Event.$on(`setEditOnInput${this.model.pin}`, this.editModeOnSingle);
-    Event.$on(`setEditOffInput${this.model.pin}`, this.editModeOffSingle);
+    // console.log(this.elt);
     Event.$on('setEditOn', this.editModeOn);
     Event.$on('setEditOff', this.editModeOff);
     Event.$on('overflowingTrue', this.overflowingTrue);
     Event.$on('overflowingFalse', this.overflowingFalse);
     Event.$on('clearAllSelected', this.clearAllSelected);
     Event.$on('clearAllActiveLayers', this.clearAllActiveLayers);
+    
+    Event.$on('assignNewPINs', this.setDynamicEvents);
+    Event.$on('clearPreviousPINs', this.eraseDynamicEvents);
   },
   methods: {
+    setFocus() {
+      console.log('Setting focus to:');
+      console.log(this.elt);
+      this.$nextTick(() => this.elt.focus({ preventScroll: false }));
+      document.activeElement = this.elt;
+      console.log(document.activeElement);
+    },
+    clearFocus() {
+      this.$nextTick(() => this.elt.blur());
+    },
+    setDynamicEvents() {
+      // console.log(`Assigning new layer event`);
+      Event.$on(`setFocusOnRow${this.model.pin}`, this.setFocus);
+      Event.$on(`clearFocusOnRow${this.model.pin}`, this.clearFocus);
+      Event.$on(`setEditOnInput${this.model.pin}`, this.editModeOnSingle);
+      Event.$on(`setEditOffInput${this.model.pin}`, this.editModeOffSingle);
+    },
+    eraseDynamicEvents() {
+      // console.log(`Deleting layer events`);
+      Event.$on(`setFocusOnRow${this.model.pin}`, this.setFocus);
+      Event.$on(`clearFocusOnRow${this.model.pin}`, this.clearFocus);
+      Event.$off(`setEditOnInput${this.model.pin}`, this.editModeOnSingle);
+      Event.$off(`setEditOffInput${this.model.pin}`, this.editModeOffSingle);
+    },
     clearAllActiveLayers() {
       if (/layer/i.test(this.model.type))
       this.model.activeLayer = false;
@@ -767,7 +951,7 @@ Vue.component('layer', {
     },
     editModeOnSingle() {
       this.editMode = true;
-      console.log('Edit received')
+      console.log(`Edit received for ${this.model.pin}, sending to focus`);
       Event.$emit(`setFocusInput${this.model.pin}`);
     },
     editModeOffSingle() {
@@ -860,7 +1044,10 @@ Vue.component('layer-name', {
   },
   template: `
     <div class="name-wrap">
-      <span v-on:dblclick="toggleEdit" v-if="!isEdit" class="layer-name">{{model.name}}</span>
+      <span 
+        v-on:dblclick="toggleEdit"
+        v-if="!isEdit"
+        class="layer-name">{{model.name}}</span>
     </div>
   `,
       // <layer-input v-else :model="model" :index="index" />
@@ -870,9 +1057,18 @@ Vue.component('layer-name', {
     }
   },
   mounted() {
-    Event.$on(`resetLayerName${this.model.pin}`, this.editModeOff);
+    Event.$on('assignNewPINs', this.setDynamicEvents);
+    Event.$on('clearPreviousPINs', this.eraseDynamicEvents);
   },
   methods: {
+    setDynamicEvents() {
+      // console.log('Creating new layer-name events')
+      Event.$on(`resetLayerName${this.model.pin}`, this.editModeOff);
+    },
+    eraseDynamicEvents() {
+      // console.log('Deleting layer-name events')
+      Event.$off(`resetLayerName${this.model.pin}`, this.editModeOff);
+    },
     editModeOff() {
       this.isEdit = false;
     },
@@ -1101,41 +1297,54 @@ Vue.component('layer-input', {
     return {
       msg: '',
       elt: {},
-      globalEditMode: false,
+      // globalEditMode: false,
     }
   },
   computed: {
+    globalEditMode: function () {
+      return this.$root.globalEditMode;
+    },
     isWake: function () {
       return this.model.isActive;
     },
   },
   mounted() {
+    this.msg = this.model.placeholder;
     this.elt = this.$el.children[0];
     this.elt.addEventListener('blur', this.eraseEdit);
     this.elt.addEventListener('focus', this.isFocused);
     // console.log(this.$refs);
-    Event.$on('globalEditOn', this.setGlobalOn);
-    Event.$on('globalEditOff', this.setGlobalOff);
-    Event.$on(`setFocusInput${this.model.pin}`, this.setFocus);
-    Event.$on(`clearFocusInput${this.model.pin}`, this.clearFocus)
+    // Event.$on('globalEditOn', this.setGlobalOn);
+    // Event.$on('globalEditOff', this.setGlobalOff);
+    Event.$on('assignNewPINs', this.setDynamicEvents);
+    Event.$on('clearPreviousPINs', this.eraseDynamicEvents);
   },
   methods: {
+    setDynamicEvents() {
+      // console.log('Creating new input events')
+      Event.$on(`setFocusInput${this.model.pin}`, this.setFocus);
+      Event.$on(`clearFocusInput${this.model.pin}`, this.clearFocus)
+    },
+    eraseDynamicEvents() {
+      // console.log('Deleting input events')
+      Event.$off(`setFocusInput${this.model.pin}`, this.setFocus);
+      Event.$off(`clearFocusInput${this.model.pin}`, this.clearFocus)
+    },
     submitName() {
       // console.log(`${this.model.pin} : ${this.msg}`);
       const self = this;
-      let message = {
-        name: self.msg,
-        pin: self.model.pin
+      if (this.msg.length) {
+        let message = {
+          name: self.msg,
+          pin: self.model.pin
+        }
+        Event.$emit('renameInput', JSON.stringify(message));
       }
-      Event.$emit('renameInput', JSON.stringify(message));
     },
-    setGlobalOff() {
-      this.globalEditMode = false;
-    },
-    setGlobalOn() {
-      this.globalEditMode = true;
-    },
+    // setGlobalOff() { this.$root.globalEditMode = false; },
+    // setGlobalOn() { this.$root.globalEditMode = true; },
     isFocused() {
+      console.log(this.model.pin)
       Event.$emit(`selectionChange`, JSON.stringify(this.model));
     },
     eraseEdit() {
@@ -1151,13 +1360,11 @@ Vue.component('layer-input', {
       }
     },
     setFocus() {
-      console.log('Setting focus to:');
-      console.log(this.$refs);
-      this.$nextTick(() => this.$refs[this.model.pin].focus());
+      // console.log('Setting focus to:');
+      this.$nextTick(() => this.elt.focus());
     },
     clearFocus() {
-      console.log('Clearing focus')
-      this.$nextTick(() => this.$refs[this.model.pin].blur());
+      this.$nextTick(() => this.elt.blur());
     },
     checkStyle() {
       let style = '';
@@ -1173,7 +1380,8 @@ Vue.component('layer-input', {
     },
     submitTest() {
       if (this.msg.length) {
-        console.log(`Submitting ${this.msg}`);
+        Event.$emit(`resetLayerName${this.model.pin}`);
+        this.clearFocus();
       }
     }
   }
@@ -1447,9 +1655,30 @@ Vue.component('event-manager', {
     onKeyDownOutside(e, el) {
       this.$root.parseModifiers(e);
       this.checkDebugKeypress(e);
+      if ((/arrow/i.test(e.key)) && (!this.$root.globalEditMode)) {
+        if (!this.$root.Alt) {
+          e.preventDefault();
+          Event.$emit('navigateSelection', e.key.substring(5, e.key.length))
+        }
+      };
       Event.$emit('newAction', 'keyDown');
     },
     onKeyUpOutside(e, el) {
+      if (/enter/i.test(e.key)) {
+        if (this.$root.Alt) {
+          console.log('Alt enter was pressed');
+          if (this.$root.globalEditMode) {
+            console.log('Turn edit off')
+            Event.$emit('setEditOff');
+            Event.$emit('globalEditOff');
+          } else {
+            console.log('Turn edit on')
+            Event.$emit('setEditOn');
+            Event.$emit('globalEditOn');
+          }
+          // this.$root.globalEditMode = !this.$root.globalEditMode;
+        }
+      }
       this.$root.parseModifiers(e);
       this.checkDebugKeypress(e);
       Event.$emit('newAction', 'keyUp');
@@ -1602,11 +1831,14 @@ var app = new Vue({
     Shift: false,
     Ctrl: false,
     Alt: false,
+    globalEditMode: false,
     aParent: '',
     bParent: '',
     abParent: '',
+    sParent: '',
     inputPosition: [],
     inputTarget: '',
+    temp: {},
     master: {
       selection: []
     },
@@ -1658,14 +1890,32 @@ var app = new Vue({
     Event.$on('debugModeOn', this.startDebug);
     Event.$on('debugModeOff', this.stopDebug);
     Event.$on('updateStorage', self.updateStorage);
+    Event.$on('globalEditOn', this.globalEditOn);
+    Event.$on('globalEditOff', this.globalEditOff);
     this.getVersion();
     // this.tryFetch();
     // if (this.notificationsEnabled)
     //   Event.$emit('showNotification');
     // else
     //   Event.$emit('hideNotification');
+    // document.addEventListener('keydown', this.checkKey);
+    // console.log(document.body);
   },
   methods: {
+    globalEditOn() {
+      if (!this.globalEditMode) {
+        console.log('Bouncer')
+        this.globalEditMode = true; 
+        Event.$emit('globalEditBounce');
+      }
+    },
+    globalEditOff() { this.globalEditMode = false; },
+    // checkKey(evt) {
+    //   if (/arrow/i.test(evt.key)) {
+    //     evt.preventDefault();
+    //     console.log(`${evt.key} was pressed and trying to prevent`)
+    //   }
+    // },
     getVersion() {
       const path = csInterface.getSystemPath(SystemPath.EXTENSION);
       const xml = window.cep.fs.readFile(`${path}/CSXS/manifest.xml`);

@@ -76,6 +76,8 @@
 .layer-body {
     display: flex;
     align-items: center;
+    overflow-x: hidden;
+    width: 98%;
 }
 
 span {

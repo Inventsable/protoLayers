@@ -54,6 +54,7 @@ html {
   width: 100vw;
   margin: 0px;
   padding: 0px;
+  overflow-x: hidden;
 }
 
 /* svg { width: 100%; } */
@@ -88,9 +89,26 @@ textarea {
 ::-webkit-scrollbar-resizer{
   display: none;
 }
-::-webkit-scrollbar-button, ::-webkit-scrollbar-corner {
-  /*  */
+::-webkit-scrollbar-button {
+  /* width: 6px; */
+  height: 6px;
 }
+
+::-webkit-scrollbar-button:single-button:start {
+  background-image: url('../../assets/scrollbar/darkestUpIdle.png');
+  background-size: 100%;
+  background-repeat: no-repeat;
+  /* background-position: 0% 100%; */
+  /* background-color: green; */
+}
+::-webkit-scrollbar-button:single-button:end {
+  background-image: url('../../assets/scrollbar/darkestDownIdle.png');
+  background-size: 100%;
+  background-repeat: no-repeat;
+
+  /* background-color: red; */
+}
+
 
 #app {
   box-sizing: border-box;

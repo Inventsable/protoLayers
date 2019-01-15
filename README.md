@@ -36,6 +36,9 @@ git clone https://github.com/Inventsable/protoLayers.git
 * ~~Active Layer logic~~
 * ~~Multiple scanners to prompt new crawl for panel update: selection, layer number, pageItem number, activeLayer~~
 * ~~Easily rename layers~~
+* Inject `pageItem.typename` into input if name is fully deleted
+* Sorting/click/drag logic
+* Generate preview boxes for each layer/sublayer
 * Easily traverse layers or select multiple with `Arrow Up/Down`
 * Easily traverse inside/fold/unfold layer with `Arrow Right/Left`
 * Dynamic context menu to replace the busy vanilla Flyout menu
