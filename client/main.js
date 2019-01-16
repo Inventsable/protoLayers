@@ -68,8 +68,11 @@ Vue.component('protolayers', {
       layerlist: [],
       pageItems: [],
       target: {},
+      lastTarget: {},
       parent: {},
       navigator: {},
+      parentIndex: 0,
+      ancestors: [],
     }
   },
   computed: {
@@ -121,13 +124,15 @@ Vue.component('protolayers', {
     setSelection(target) {
       Event.$emit('clearAllSelected');
       target.selected = true;
+      this.lastTarget = target;
+      console.log(`Last index was ${target.index}`);
       const child = {
         pin: target.pin,
         depth: target.depth,
         index: target.index,
       }
       this.$root.master.selection = [child];
-      // Event.$emit(`setFocusOnRow${target.pin}`);
+      Event.$emit(`setFocusOnRow${target.pin}`);
       // console.log(`${this.selection[0].depth} :: ${this.selection[0].index} :: ${this.selection[0].pin}`);
     },
     getTarget() {
@@ -143,31 +148,25 @@ Vue.component('protolayers', {
         let index = this.selection[0].index;
         sParent = this.findPINParent(this.layerlist, 'root', this.selection[0].pin, 's')
         sParent = this.findPIN(this.layerlist, this.$root.sParent);
-        console.log(`Parent is`)
-        sParent = sParent.children;
-        console.log(sParent);
-        console.log('Child is')
-        // this.target = sParent.children[]
         return sParent.children;
       } else {
         return this.layerlist;
       }
     },
     navigateSelection(dir) {
-      console.log(`Navigating ${dir}`);
-      console.log(this.selection[0].index)
+      // console.log(`Navigating ${dir}`);
       let pathfinder = this.findPIN(this.layerlist, this.selection[0].pin);
       this.target = this.findPIN(this.layerlist, this.selection[0].pin);
-      // if (this.hasSelection) {
-      //   let sParent = this.layerlist, sPin;
-      //   if (this.selection[0].depth > 0) {
-      //     let index = this.selection[0].index;
-      //     sParent = this.findPINParent(this.layerlist, 'root', this.selection[0].pin, 's')
-      //     sParent = this.findPIN(this.layerlist, this.$root.sParent);
-      //     this.parent = sParent;
-      //     this.target = this.parent.children[index];
-      //   }
-      // }
+      if (this.hasSelection) {
+        let sParent = this.layerlist, sPin;
+        if (this.selection[0].depth > 0) {
+          let index = this.selection[0].index;
+          sParent = this.findPINParent(this.layerlist, 'root', this.selection[0].pin, 's')
+          sParent = this.findPIN(this.layerlist, this.$root.sParent);
+          this.parent = sParent.children;
+          this.target = sParent.children[index];
+        }
+      }
       if (/up|down/i.test(dir)) {
         let offset;
         if (/up/i.test(dir))
@@ -178,53 +177,124 @@ Vue.component('protolayers', {
       } else {
         this.navigateFold(dir);
       }
-      
+    },
+
+    getParentIndex(list, parent) {
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        if (item == parent)
+          return i;
+      }
     },
     navigateParent(num) {
-      // console.log(target);
-      // let index = target.index;
-      // let target = this.getTarget();
-      let list = this.getParent();
-      target = this.target;
-      console.log(target)
+      let list, target;
+      list = this.getParent();
+      target = this.getTarget();
       try {
         if (num > 0) {
+          console.log(`RR: Moving down ${target.index} to ${target.index + num}`)
           if (target.index + num < list.length) {
-            if ((this.autoTarget.open) && (this.autoTarget.children.length)) {
+            if ((target.open) && (target.children.length)) {
+              this.parentIndex = target.index;
+              this.ancestors = list;
               target = target.children[0];
             } else {
               target = list[target.index + num];
             }
           } else {
-            target = list[0];
+            console.log('Logic not yet written')
+            if ((target.open) && (target.children.length)) {
+              // console.log(`Move into child`)
+              this.parentIndex = target.index;
+              this.ancestors = list;
+              target = target.children[0];
+            } else {
+              target = list[0];
+            }
           }
         } else {
+          console.log(`Moving up from ${target.index} to ${target.index + num}`)
           if (target.index + num >= 0) {
+            console.log(`Move from ${target.index} to ${target.index + num}`)
             target = list[target.index + num];
+            if ((target.open) && (target.children.length)) {
+              console.log('Queen')
+              console.log(`Move into child above`)
+              this.parentIndex = target.index;
+              this.ancestors = list;
+              target = target.children[target.children.length - 1]
+            }
           } else {
             target = list[list.length - 1];
+            if ((target.open) && (target.children.length)) {
+              this.parentIndex = target.index;
+              this.ancestors = list;
+              target = target.children[target.children.length - 1]
+            }
+            // console.log(`Reset to ${list.length - 1}`)
           }
         }
-      } catch (err) {
-        // console.log(err)
-        console.log('Error for target, rechecking...')
-        console.log(this.selection[0].pin)
-        target = this.findPIN(list, this.selection[0].pin);
-        console.log(target)
-      } finally {
         this.setSelection(target);
-        // console.log(this.autoParent.name);
-        console.log(list);
-        console.log(target.name);
-        console.log(target);
+      } catch (err) {
+        console.log('Backdoor for target undefined')
+        target = this.lastTarget;
+        list = this.parent;
+        console.log(`${target.index} of ${list.length}`)
+        if (num > 0) {
+          if (this.target.index + num < list.length) {
+            if ((target.open) && (target.children.length)) {
+              // console.log(`Move into child`)
+              this.parentIndex = target.index;
+              this.ancestors = list;
+              target = target.children[0];
+              console.log(`RR: ${target.index}`)
+            } else {
+              console.log(`${target.index} + ${num}`)
+              let newpos = target.index + num;
+              console.log(`RRS: Move from ${target.index} to ${newpos}`)
+              target = list[newpos];
+              console.log(newpos)
+              console.log(list);
+              console.log(target);
+              this.target = target;
+              this.lastTarget = target;
+              // this.setSelection(target);
+              // return this.setSelection(target);
+            }
+          } else {
+            console.log('NN: Logic not yet written')
+            if (this.parentIndex + 1 < this.ancestors.length)
+              target = this.ancestors[this.parentIndex + 1];
+            else
+              target = this.ancestors[0];
+          }
+          console.log('Rook')
+          this.setSelection(target);
+        } else {
+          console.log(`NN: Move from ${target.index} to ${target.index + num}`)
+          if (this.target.index + num >= 0) {
+            console.log('Bishop')
+            target = list[target.index + num];
+          } else {
+            console.log(`NN: Step back to parent`)
+            target = this.ancestors[this.parentIndex];
+            if ((target.open) && (target.children.length)) {
+              this.parentIndex = target.index;
+              this.ancestors = list;
+              target = target.children[target.children.length - 1]
+            }
+          }
+          console.log('Bishops')
+          this.setSelection(target);
+        }
+      } finally {
+        console.log('Complete')
       }
     },
     navigateFold(direction) {
       if ((/left/i.test(direction)) && (/layer|group/i.test(this.target.type)) && (this.target.children.length)) {
-        console.log('Closing')
         this.target.open = false;
       } else if ((/right/i.test(direction)) && (/layer|group/i.test(this.target.type)) && (this.target.children.length)) {
-        console.log('Opening')
         this.target.open = true;
       }
     },
@@ -881,7 +951,7 @@ Vue.component('layer', {
           </div>
         </div>
         <div class="layer-body" @click="onSelection">
-          <layer-preview />
+          <layer-preview :model="model" />
           <layer-input v-show="editMode" :model="model" :index="index" />
           <layer-name v-show="!editMode" :model="model" :index="index" />
           <fake-focus v-show="!editMode" />
@@ -942,6 +1012,7 @@ Vue.component('layer', {
     setFocus() {
       this.$nextTick(() => this.fakeElt.focus({ preventScroll: false }));
       document.activeElement = this.fakeElt;
+      // console.log(document.activeElement);
     },
     clearFocus() {
       this.$nextTick(() => this.elt.blur());
@@ -1072,7 +1143,22 @@ Vue.component('layer', {
 })
 
 Vue.component('layer-tab', { template: `<div class="layer-tab"></div>` })
-Vue.component('layer-preview', { template: `<div class="layer-preview"></div>` })
+Vue.component('layer-preview', {
+  props: {
+    model: Object,
+  },
+  template: `
+    <div class="layer-preview" :style="getStyle()"></div>
+  `,
+  methods: {
+    getStyle() {
+      let style = '';
+
+
+      return style;
+    }
+  }
+})
 
 Vue.component('layer-name', {
   props: {
@@ -1910,10 +1996,8 @@ var app = new Vue({
         result = false;
       return result;
     },
-    rootName: function () {
-      const str = csInterface.getSystemPath(SystemPath.EXTENSION);
-      return str.substring(str.lastIndexOf('/') + 1, str.length);
-    },
+    rootName: function () { return this.rootPath.substring(this.rootPath.lastIndexOf('/') + 1, this.rootPath.length); },
+    rootPath: function () { return csInterface.getSystemPath(SystemPath.EXTENSION); },
     clone: function () {
       let self = this;
       let child = {
@@ -1942,6 +2026,9 @@ var app = new Vue({
     Event.$on('updateStorage', self.updateStorage);
     Event.$on('globalEditOn', this.globalEditOn);
     Event.$on('globalEditOff', this.globalEditOff);
+
+    csInterface.evalScript(`assignExtensionPath('${this.rootPath}')`)
+
     this.getVersion();
     // this.tryFetch();
     // if (this.notificationsEnabled)

@@ -1,6 +1,11 @@
 var pinList = [];
+var extRoot;
 function getPIN() {
     return checkPIN(Math.floor(Math.random() * 16777215).toString(16));
+}
+function assignExtensionPath(path) {
+    extRoot = path;
+    console.log("Path assigned to " + path);
 }
 function checkPIN(pin) {
     var err = 0;
@@ -56,7 +61,69 @@ function getPageItemCount() {
 function setActiveLayer(index) {
     app.activeDocument.activeLayer = app.activeDocument.layers[index];
 }
+// let fake = {
+//     geometricBounds: [2.22, 3.77, 17.77, -5.00],
+// }
+// testPreview(fake, '66eeff');
+function testPreview(item, pin) {
+    var result = app.activeDocument.imageCapture(new File(extRoot + "/preview/" + pin + ".png"), item.visibleBounds);
+}
+function findAllVisibility() {
+    var mirror = [];
+    for (var i = 0; i < app.activeDocument.layers.length; i++) {
+        var layer = app.activeDocument.layers[i];
+        console.log("Collecting visibility for " + layer.name);
+        mirror.push(getLayerVisibility(layer));
+    }
+    return mirror;
+}
+function getLayerVisibility(layer) {
+    var master = {
+        hidden: !layer.visible,
+        children: []
+    };
+    // console.log('Hello')
+    if (layer.layers) {
+        for (var l = 0; l < layer.layers.length; l++)
+            master.children.push(getLayerVisibility(layer.layers[l]));
+    }
+    if (layer.pageItems.length) {
+        for (var i = 0; i < layer.pageItems.length; i++) {
+            var item = layer.pageItems[i];
+            var child = {
+                hidden: item.hidden
+            };
+            if (/group/i.test(item.typename))
+                child['children'] = getLayerVisibility(item);
+            else
+                child['children'] = [];
+            master.children.push(child);
+            // item.hidden = true;
+        }
+    }
+    if (/layer/i.test(layer.type))
+        layer.visible = false;
+    else
+        layer.hidden = true;
+    return master;
+}
+function getPreview(item, pin) {
+    console.log(pin + " @ " + item.visibleBounds);
+    // let result = app.activeDocument.imageCapture(new File(`${extRoot}/preview/${pin}.png`), item.visibleBounds);
+    // console.log(`${extRoot}/preview/${item.pin}.png`)
+    // let file = ;
+    // let isOpen = file.open('w');
+    // let isClose = file.close();
+    // if (isClose)
+    // return true;
+    // console.log(extRoot);
+    // file.path = app.ex
+    // return `${}`
+    // app.activeDocument.
+}
 function getTotalLayerList() {
+    var visibilities = findAllVisibility();
+    console.log(visibilities.join(','));
     var mirror = [];
     pinList = [];
     for (var i = 0; i < app.activeDocument.layers.length; i++) {
@@ -128,6 +195,7 @@ function getLayerDetails(layer, depth, index, parent) {
                 parent: index,
                 pin: getPIN()
             };
+            child['preview'] = getPreview(item, child.pin);
             if (!child.name.length)
                 child.name = '\<' + item.typename.replace(/Item/, '') + '\>';
             if (/group/i.test(item.typename))
