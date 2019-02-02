@@ -37,10 +37,10 @@ git clone https://github.com/Inventsable/protoLayers.git
 * ~~Multiple scanners to prompt new crawl for panel update: selection, layer number, pageItem number, activeLayer~~
 * ~~Easily rename layers~~
 * Inject `pageItem.typename` into input if name is fully deleted
-* Sorting/click/drag logic
+* ~~Sorting/click/drag logic~~
 * Generate preview boxes for each layer/sublayer
-* Easily traverse layers or select multiple with `Arrow Up/Down`
-* Easily traverse inside/fold/unfold layer with `Arrow Right/Left`
+* ~~Easily traverse layers or select multiple with `Arrow Up/Down`~~
+* ~~Easily traverse inside/fold/unfold layer with `Arrow Right/Left`~~
 * Dynamic context menu to replace the busy vanilla Flyout menu
 * Automatic stripping of `' copy'` from layer names
 * Subtle bodymovin' animations for all icons (vanilla Layers panel has animated arrows)

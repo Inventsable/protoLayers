@@ -83,8 +83,8 @@ function findAllVisibility() {
     let mirror = [];
     for (var i = 0; i < app.activeDocument.layers.length; i++) {
         var layer = app.activeDocument.layers[i];
-        console.log(`Collecting visibility for ${layer.name}`);
-        mirror.push(getLayerVisibility(layer))
+        // console.log(`Collecting visibility for ${layer.name}`);
+        // mirror.push(getLayerVisibility(layer))
     }
     return mirror;
 }
@@ -114,15 +114,15 @@ function getLayerVisibility(layer) {
             // item.hidden = true;
         }
     }
-    if (/layer/i.test(layer.type))
-        layer.visible = false;
-    else
-        layer.hidden = true;
+    // if (/layer/i.test(layer.type))
+    //     layer.visible = false;
+    // else
+    //     layer.hidden = true;
     return master;
 }
 
 function getPreview(item, pin) {
-    console.log(`${pin} @ ${item.visibleBounds}`)
+    // console.log(`${pin} @ ${item.visibleBounds}`)
     // let result = app.activeDocument.imageCapture(new File(`${extRoot}/preview/${pin}.png`), item.visibleBounds);
     // console.log(`${extRoot}/preview/${item.pin}.png`)
     // let file = ;
@@ -137,8 +137,8 @@ function getPreview(item, pin) {
 }
 
 function getTotalLayerList() {
-    let visibilities = findAllVisibility();
-    console.log(visibilities.join(','))
+    // let visibilities = findAllVisibility();
+    // console.log(visibilities.join(','))
     let mirror = [];
     pinList = [];
     for (let i = 0; i < app.activeDocument.layers.length; i++) {
